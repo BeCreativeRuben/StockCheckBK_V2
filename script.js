@@ -12,7 +12,7 @@ const BATCH_SYNC_DELAY = 1000; // 1 seconde wachten na laatste wijziging voor ba
 const adminPassword = 'battlekart2025';
 // IMPORTANT: After deploying Google Apps Script as Web App, paste the Web App URL here:
 // Example: const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
-const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKOTZLix7FRzu3l8C97jSfOr57wBe2Tz5ecLm4pvptNd4W7m8WvgsnFigAMqL2YLRJTA/exec';
+const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwtha4Hzc1pk-WjKCqrmL_r7EozWl8UG-sfV-U7-GTcMZ3RmK_bsGmcQNCEvUC3j4MuRQ/exec';
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
