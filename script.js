@@ -3,14 +3,22 @@ let currentUser = null;
 let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
+let lastKnownModifiedDate = null;
+let realtimeSyncInterval = null;
+const REALTIME_SYNC_INTERVAL = 30000; // 30 seconden - interval voor realtime updates
 const adminPassword = 'battlekart2025';
 // IMPORTANT: After deploying Google Apps Script as Web App, paste the Web App URL here:
 // Example: const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
-const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzCVV8VcFlZCPVf_hlF9fccgXFiN4AwKB7MO4ghOyFEEYAlI7rl7ENmsJMM6Qm-GY1NOQ/exec'; // Will be filled after deployment
+const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKOTZLix7FRzu3l8C97jSfOr57wBe2Tz5ecLm4pvptNd4W7m8WvgsnFigAMqL2YLRJTA/exec';
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
+});
+
+// Stop realtime sync bij page unload om resources te besparen
+window.addEventListener('beforeunload', () => {
+    stopRealtimeSync();
 });
 
 function initializeApp() {
@@ -52,6 +60,8 @@ function checkUserSession() {
         currentUser = storedUser;
         isAdmin = storedAdmin;
         updateUserDisplay();
+        loadStockData();
+        startRealtimeSync();
     } else {
         showLoginModal();
     }
@@ -80,9 +90,11 @@ function handleUserLogin(e) {
     updateUserDisplay();
     hideLoginModal();
     loadStockData();
+    startRealtimeSync();
 }
 
 function handleLogout() {
+    stopRealtimeSync();
     currentUser = null;
     isAdmin = false;
     sessionStorage.removeItem('currentUser');
@@ -173,10 +185,20 @@ async function loadStockData() {
                         stockData = data.items;
                         if (data.lastModified) {
                             updateLastModifiedInfo(data.lastModified);
+                            // Bewaar de laatste wijzigingsdatum voor realtime sync
+                            if (data.lastModified.lastModifiedDate) {
+                                lastKnownModifiedDate = data.lastModified.lastModifiedDate;
+                            }
                         }
-                        renderStockGrid();
-                        saveToLocalStorage();
-                        showToast('Data geladen', 'success');
+                        
+                        // Als de spreadsheet leeg is, initialiseer met default data
+                        if (stockData.length === 0) {
+                            initializeDefaultData();
+                        } else {
+                            renderStockGrid();
+                            saveToLocalStorage();
+                            showToast('Data geladen', 'success');
+                        }
                         return;
                     }
                 }
@@ -347,11 +369,109 @@ function updateLastModifiedInfo(lastModified) {
             const user = lastModified.lastModifiedBy || 'Onbekend';
             const dateString = date.toLocaleString('nl-NL');
             document.getElementById('lastModifiedText').textContent = `${user} - ${dateString}`;
+            // Update lastKnownModifiedDate voor realtime sync
+            lastKnownModifiedDate = lastModified.lastModifiedDate;
         } catch (error) {
             document.getElementById('lastModifiedText').textContent = '-';
         }
     } else {
         document.getElementById('lastModifiedText').textContent = '-';
+    }
+}
+
+// Realtime Sync - Check periodiek voor updates van andere gebruikers
+function startRealtimeSync() {
+    if (!GOOGLE_APPS_SCRIPT_URL) return;
+    
+    // Stop bestaande interval als die er is
+    stopRealtimeSync();
+    
+    // Start nieuwe interval
+    realtimeSyncInterval = setInterval(async () => {
+        await checkForUpdates();
+    }, REALTIME_SYNC_INTERVAL);
+    
+    console.log('Realtime sync gestart (elke 30 seconden)');
+}
+
+function stopRealtimeSync() {
+    if (realtimeSyncInterval) {
+        clearInterval(realtimeSyncInterval);
+        realtimeSyncInterval = null;
+        console.log('Realtime sync gestopt');
+    }
+}
+
+// Check of er updates zijn zonder de volledige data op te halen
+async function checkForUpdates() {
+    if (!GOOGLE_APPS_SCRIPT_URL || !currentUser) return;
+    
+    try {
+        // Haal alleen de config op (lichtgewicht - bevat LastModifiedDate)
+        const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=config`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.lastModified && data.lastModified.lastModifiedDate) {
+                const serverModifiedDate = data.lastModified.lastModifiedDate;
+                const serverModifiedBy = data.lastModified.lastModifiedBy;
+                
+                // Check of er een wijziging is
+                if (lastKnownModifiedDate && serverModifiedDate !== lastKnownModifiedDate) {
+                    // Alleen toast tonen als het niet door de huidige gebruiker is
+                    const isOwnChange = serverModifiedBy === currentUser;
+                    
+                    // Er is een wijziging, haal de volledige data op
+                    await loadStockDataSilent();
+                    
+                    // Toon toast alleen als het niet onze eigen wijziging is
+                    if (!isOwnChange) {
+                        showToast('🔄 Data bijgewerkt', 'info');
+                    }
+                } else if (!lastKnownModifiedDate) {
+                    // Eerste keer - initialiseer lastKnownModifiedDate
+                    lastKnownModifiedDate = serverModifiedDate;
+                }
+            }
+        }
+    } catch (error) {
+        // Stil falen - log alleen in console
+        console.debug('Realtime sync check gefaald:', error);
+    }
+}
+
+// Silent load zonder toast notifications (voor realtime updates)
+async function loadStockDataSilent() {
+    try {
+        if (GOOGLE_APPS_SCRIPT_URL) {
+            try {
+                const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=read`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.items) {
+                        stockData = data.items;
+                        if (data.lastModified) {
+                            updateLastModifiedInfo(data.lastModified);
+                            if (data.lastModified.lastModifiedDate) {
+                                lastKnownModifiedDate = data.lastModified.lastModifiedDate;
+                            }
+                        }
+                        renderStockGrid();
+                        saveToLocalStorage();
+                        return;
+                    }
+                }
+            } catch (fetchError) {
+                console.error('Error fetching from Google Apps Script:', fetchError);
+            }
+        }
+        
+        // Fallback to localStorage
+        loadFromLocalStorage();
+        renderStockGrid();
+    } catch (error) {
+        console.error('Error loading data:', error);
+        loadFromLocalStorage();
+        renderStockGrid();
     }
 }
 

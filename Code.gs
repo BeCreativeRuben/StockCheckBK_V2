@@ -4,14 +4,19 @@
 // - Who has access: Anyone
 
 // Spreadsheet Configuration
-const SPREADSHEET_ID = '12gHHK06TSex6EOZuPsLaZMgsqk9gNv4XYqgF3Kp5Qqs';
+const SPREADSHEET_ID = '12gHHK06tSex6EOZuPsLaZMgsqk9gNv4XYqgF3Kp5Qqs';
 const SHEET_STOCK_DATA = 'Stock Data';
 const SHEET_LOGGING = 'Logging';
 const SHEET_CONFIG = 'Config';
 
 // Get Spreadsheet
 function getSpreadsheet() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (error) {
+    console.error('Error opening spreadsheet:', error);
+    throw new Error('Cannot open spreadsheet. Check if the ID is correct and the spreadsheet is accessible. Error: ' + error.toString());
+  }
 }
 
 // Get Sheet by Name
