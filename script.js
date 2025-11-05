@@ -13,6 +13,7 @@ const adminPassword = 'battlekart2025';
 // IMPORTANT: After deploying Google Apps Script as Web App, paste the Web App URL here:
 // Example: const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwtha4Hzc1pk-WjKCqrmL_r7EozWl8UG-sfV-U7-GTcMZ3RmK_bsGmcQNCEvUC3j4MuRQ/exec';
+https://script.google.com/macros/s/AKfycbwtha4Hzc1pk-WjKCqrmL_r7EozWl8UG-sfV-U7-GTcMZ3RmK_bsGmcQNCEvUC3j4MuRQ/exec
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -233,8 +234,6 @@ async function loadStockData() {
                         // Als de spreadsheet leeg is, initialiseer met default data
                         if (stockData.length === 0) {
                             initializeDefaultData();
-                            renderStockGrid();
-                            showToast('Data geïnitialiseerd', 'success');
                         } else {
                             renderStockGrid();
                             saveToLocalStorage();
@@ -354,9 +353,8 @@ function initializeDefaultData() {
     }));
     
     saveToLocalStorage();
-    renderStockGrid(); // Render de UI direct na initialisatie
     if (GOOGLE_APPS_SCRIPT_URL) {
-        syncToGoogleSheets(); // Sync naar Google Sheets (async, maar niet blocking)
+        syncToGoogleSheets();
     }
 }
 
