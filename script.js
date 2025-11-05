@@ -5,7 +5,10 @@ let currentCategory = 'all';
 let stockData = [];
 let lastKnownModifiedDate = null;
 let realtimeSyncInterval = null;
+let pendingUpdates = []; // Batch queue voor updates
+let batchSyncTimeout = null; // Timeout voor debouncing
 const REALTIME_SYNC_INTERVAL = 30000; // 30 seconden - interval voor realtime updates
+const BATCH_SYNC_DELAY = 1000; // 1 seconde wachten na laatste wijziging voor batch sync
 const adminPassword = 'battlekart2025';
 // IMPORTANT: After deploying Google Apps Script as Web App, paste the Web App URL here:
 // Example: const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
@@ -16,9 +19,39 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
 });
 
-// Stop realtime sync bij page unload om resources te besparen
+// Stop realtime sync bij page unload en probeer pending updates te flush
 window.addEventListener('beforeunload', () => {
     stopRealtimeSync();
+    // Flush pending updates before page unload (niet altijd betrouwbaar, maar we proberen het)
+    if (pendingUpdates.length > 0 && batchSyncTimeout) {
+        clearTimeout(batchSyncTimeout);
+        // Gebruik fetch met keepalive flag (wordt mogelijk niet uitgevoerd, maar we proberen het)
+        if (GOOGLE_APPS_SCRIPT_URL && pendingUpdates.length === 1) {
+            const update = pendingUpdates[0];
+            fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'updateItem',
+                    item: { id: update.itemId, value: update.value },
+                    field: update.field,
+                    user: currentUser
+                }),
+                keepalive: true
+            }).catch(() => {}); // Ignore errors, we're leaving anyway
+        } else if (GOOGLE_APPS_SCRIPT_URL && pendingUpdates.length > 1) {
+            fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'updateBatch',
+                    updates: pendingUpdates,
+                    user: currentUser
+                }),
+                keepalive: true
+            }).catch(() => {}); // Ignore errors, we're leaving anyway
+        }
+    }
 });
 
 function initializeApp() {
@@ -95,6 +128,12 @@ function handleUserLogin(e) {
 
 function handleLogout() {
     stopRealtimeSync();
+    // Flush pending updates before logout
+    if (pendingUpdates.length > 0 && batchSyncTimeout) {
+        clearTimeout(batchSyncTimeout);
+        syncBatchToGoogleSheets();
+    }
+    pendingUpdates = [];
     currentUser = null;
     isAdmin = false;
     sessionStorage.removeItem('currentUser');
@@ -337,6 +376,75 @@ function loadFromLocalStorage() {
     }
 }
 
+// Sync batch of updates to Google Sheets (optimized)
+async function syncBatchToGoogleSheets() {
+    if (!GOOGLE_APPS_SCRIPT_URL || pendingUpdates.length === 0) return;
+    
+    // Make a copy of pending updates and clear the queue
+    const updatesToSync = [...pendingUpdates];
+    pendingUpdates = [];
+    batchSyncTimeout = null;
+    
+    try {
+        // If only one update, use single item update (more efficient)
+        if (updatesToSync.length === 1) {
+            const update = updatesToSync[0];
+            const item = stockData.find(i => i.id === update.itemId);
+            
+            if (item) {
+                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'updateItem',
+                        item: {
+                            id: update.itemId,
+                            value: update.value
+                        },
+                        field: update.field,
+                        user: currentUser
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.lastModified) {
+                        updateLastModifiedInfo(data.lastModified);
+                    }
+                }
+            }
+        } else {
+            // Multiple updates: use batch update
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'updateBatch',
+                    updates: updatesToSync,
+                    user: currentUser
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.lastModified) {
+                    updateLastModifiedInfo(data.lastModified);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error syncing batch to Google Sheets:', error);
+        // Re-add failed updates to queue for retry
+        pendingUpdates = [...updatesToSync, ...pendingUpdates];
+        showToast('Fout bij sync, wordt opnieuw geprobeerd', 'error');
+    }
+}
+
+// Legacy function for full sync (still used for initial data push)
 async function syncToGoogleSheets() {
     if (!GOOGLE_APPS_SCRIPT_URL) return;
     
@@ -589,23 +697,43 @@ async function updateStockValue(itemId, field, value) {
     clearFieldError(itemId, field);
     
     const oldValue = item[field];
+    
+    // Check if value actually changed
+    if (oldValue === numValue) {
+        return; // No change, skip update
+    }
+    
     item[field] = numValue;
     item.lastModified = new Date().toISOString();
     item.modifiedBy = currentUser;
     
     saveToLocalStorage();
     
-    // Sync to Google Sheets
+    // Add to batch queue (only the changed item)
     if (GOOGLE_APPS_SCRIPT_URL) {
-        try {
-            await syncToGoogleSheets();
-            showToast('Stock bijgewerkt', 'success');
-        } catch (error) {
-            showToast('Fout bij sync, lokaal opgeslagen', 'error');
+        // Remove any existing update for this item+field combination
+        pendingUpdates = pendingUpdates.filter(u => !(u.itemId === itemId && u.field === field));
+        
+        // Add new update
+        pendingUpdates.push({
+            itemId: itemId,
+            field: field,
+            value: numValue,
+            oldValue: oldValue
+        });
+        
+        // Clear existing timeout
+        if (batchSyncTimeout) {
+            clearTimeout(batchSyncTimeout);
         }
-    } else {
-        showToast('Stock bijgewerkt', 'success');
+        
+        // Schedule batch sync with debouncing
+        batchSyncTimeout = setTimeout(async () => {
+            await syncBatchToGoogleSheets();
+        }, BATCH_SYNC_DELAY);
     }
+    
+    showToast('Stock bijgewerkt', 'success');
     
     // Re-render to update visual feedback
     renderStockGrid();

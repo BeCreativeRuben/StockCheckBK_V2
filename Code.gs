@@ -80,6 +80,10 @@ function doPost(e) {
   try {
     if (action === 'update') {
       return updateStock(data);
+    } else if (action === 'updateItem') {
+      return updateSingleItem(data);
+    } else if (action === 'updateBatch') {
+      return updateBatch(data);
     } else if (action === 'reset') {
       return resetStock(data);
     } else {
@@ -242,6 +246,120 @@ function updateStock(data) {
   });
   
   // Update config
+  updateConfig(user, timestamp);
+  
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    lastModified: {
+      lastModifiedBy: user,
+      lastModifiedDate: timestamp
+    }
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Update Single Item (optimized for single field updates)
+function updateSingleItem(data) {
+  const sheet = getSheet(SHEET_STOCK_DATA);
+  const item = data.item;
+  const field = data.field;
+  const user = data.user || 'Unknown';
+  const now = new Date();
+  const timestamp = now.toISOString();
+  
+  // Get all data to find the item
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
+  
+  // Find the item row
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] && values[i][0] == item.id) {
+      const row = i + 1;
+      const oldValue = field === 'current' ? (values[i][5] || 0) : (values[i][4] || 0);
+      const columnIndex = field === 'current' ? 6 : field === 'minimum' ? 5 : null;
+      
+      if (columnIndex) {
+        // Update the field
+        sheet.getRange(row, columnIndex).setValue(item.value);
+        // Update timestamp and user
+        sheet.getRange(row, 7).setValue(timestamp);
+        sheet.getRange(row, 8).setValue(user);
+        
+        // Log change
+        logChange({
+          timestamp: timestamp,
+          user: user,
+          itemId: item.id,
+          itemName: values[i][1] || '',
+          field: field,
+          oldValue: oldValue,
+          newValue: item.value
+        });
+      }
+      break;
+    }
+  }
+  
+  // Update config
+  updateConfig(user, timestamp);
+  
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    lastModified: {
+      lastModifiedBy: user,
+      lastModifiedDate: timestamp
+    }
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Update Batch (multiple items in one request)
+function updateBatch(data) {
+  const sheet = getSheet(SHEET_STOCK_DATA);
+  const updates = data.updates || [];
+  const user = data.user || 'Unknown';
+  const now = new Date();
+  const timestamp = now.toISOString();
+  
+  // Get all data once
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
+  
+  // Build map of existing items
+  const itemRows = {};
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] && values[i][0] !== '') {
+      itemRows[values[i][0]] = i + 1;
+    }
+  }
+  
+  // Process each update
+  updates.forEach(update => {
+    const row = itemRows[update.itemId];
+    if (row) {
+      const columnIndex = update.field === 'current' ? 6 : update.field === 'minimum' ? 5 : null;
+      if (columnIndex) {
+        const oldValue = values[row - 1][columnIndex - 1] || 0;
+        
+        // Update the field
+        sheet.getRange(row, columnIndex).setValue(update.value);
+        // Update timestamp and user
+        sheet.getRange(row, 7).setValue(timestamp);
+        sheet.getRange(row, 8).setValue(user);
+        
+        // Log change
+        logChange({
+          timestamp: timestamp,
+          user: user,
+          itemId: update.itemId,
+          itemName: values[row - 1][1] || '',
+          field: update.field,
+          oldValue: oldValue,
+          newValue: update.value
+        });
+      }
+    }
+  });
+  
+  // Update config once
   updateConfig(user, timestamp);
   
   return ContentService.createTextOutput(JSON.stringify({
