@@ -194,6 +194,8 @@ async function loadStockData() {
                         // Als de spreadsheet leeg is, initialiseer met default data
                         if (stockData.length === 0) {
                             initializeDefaultData();
+                            renderStockGrid();
+                            showToast('Data geïnitialiseerd', 'success');
                         } else {
                             renderStockGrid();
                             saveToLocalStorage();
@@ -313,8 +315,9 @@ function initializeDefaultData() {
     }));
     
     saveToLocalStorage();
+    renderStockGrid(); // Render de UI direct na initialisatie
     if (GOOGLE_APPS_SCRIPT_URL) {
-        syncToGoogleSheets();
+        syncToGoogleSheets(); // Sync naar Google Sheets (async, maar niet blocking)
     }
 }
 
