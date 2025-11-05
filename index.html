@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battlekart Stock Management System</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h2>Welkom bij Battlekart Stock Management</h2>
+            <p>Voer uw naam in om te beginnen:</p>
+            <form id="loginForm">
+                <input type="text" id="userNameInput" placeholder="Uw naam" required autofocus>
+                <button type="submit" class="btn btn-primary">Inloggen</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div id="adminLoginModal" class="modal">
+        <div class="modal-content">
+            <h2>Admin Login</h2>
+            <p>Voer het admin wachtwoord in:</p>
+            <form id="adminLoginForm">
+                <input type="password" id="adminPasswordInput" placeholder="Wachtwoord" required autofocus>
+                <button type="submit" class="btn btn-primary">Inloggen</button>
+                <button type="button" class="btn btn-secondary" onclick="hideAdminLoginModal()">Annuleren</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <h1>🏁 Battlekart Stock Management</h1>
+                <span id="currentDate" class="date-display"></span>
+            </div>
+            <div class="header-right">
+                <div id="userInfo" class="user-info">
+                    <span id="userName" class="user-name"></span>
+                    <button id="logoutBtn" class="btn btn-secondary btn-sm" onclick="handleLogout()">Uitloggen</button>
+                </div>
+                <div id="lastModifiedInfo" class="last-modified">
+                    <small>Laatste wijziging: <span id="lastModifiedText">-</span></small>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Controls Section -->
+        <section class="controls-section">
+            <div class="controls">
+                <!-- Category Filters -->
+                <div class="filter-group">
+                    <button class="filter-btn active" data-category="all">Alle Items</button>
+                    <button class="filter-btn" data-category="drank">Drank</button>
+                    <button class="filter-btn" data-category="eten">Eten</button>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="action-buttons">
+                    <button id="orderListBtn" class="btn btn-warning" onclick="generateOrderList()">
+                        📋 Bestellijst Genereren
+                    </button>
+                    <button id="exportBtn" class="btn btn-secondary" onclick="exportToExcel()">
+                        📊 Excel Export
+                    </button>
+                    <button id="resetBtn" class="btn btn-danger" onclick="clearAllStock()">
+                        🗑️ Alles Wissen
+                    </button>
+                    <button id="adminPanelBtn" class="btn btn-admin" onclick="showAdminPanel()">
+                        ⚙️ Admin Panel
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stock Grid -->
+        <section class="stock-section">
+            <div id="stockGrid" class="stock-grid">
+                <!-- Stock items will be rendered here -->
+                <div class="loading">Laden...</div>
+            </div>
+        </section>
+
+        <!-- Order List Modal -->
+        <div id="orderListModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Bestellijst</h2>
+                    <button class="modal-close" onclick="closeOrderListModal()">&times;</button>
+                </div>
+                <div id="orderListContent" class="order-list-content">
+                    <!-- Order list will be generated here -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="copyOrderList()">📋 Kopieer naar Klembord</button>
+                    <button class="btn btn-secondary" onclick="closeOrderListModal()">Sluiten</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Panel Modal -->
+        <div id="adminPanelModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Admin Panel</h2>
+                    <button class="modal-close" onclick="hideAdminPanel()">&times;</button>
+                </div>
+                <div class="admin-panel-content">
+                    <!-- Add New Item Form -->
+                    <div class="admin-section">
+                        <h3>Nieuw Item Toevoegen</h3>
+                        <form id="addItemForm" class="admin-form">
+                            <div class="form-group">
+                                <label for="newItemName">Naam *</label>
+                                <input type="text" id="newItemName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="newItemCategory">Categorie *</label>
+                                <select id="newItemCategory" required>
+                                    <option value="drank">Drank</option>
+                                    <option value="eten">Eten</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="newItemUnit">Eenheid *</label>
+                                <input type="text" id="newItemUnit" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="newItemMinimum">Minimum</label>
+                                <input type="number" id="newItemMinimum" min="0" value="0">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Toevoegen</button>
+                        </form>
+                    </div>
+
+                    <!-- Edit Items List -->
+                    <div class="admin-section">
+                        <h3>Items Beheren</h3>
+                        <div id="adminItemsList" class="admin-items-list">
+                            <!-- Admin items list will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
