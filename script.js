@@ -4,7 +4,7 @@ let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
 const adminPassword = 'battlekart2025';
-const APP_VERSION = '2.1.3'; // Version number for tracking updates
+const APP_VERSION = '2.2.0'; // Version number for tracking updates
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -407,7 +407,28 @@ function addStockItemEventListeners(item, index) {
     const minimumInput = document.querySelector(`.minimum-input[data-id="${item.id}"]`);
     
     if (currentInput) {
-        currentInput.addEventListener('blur', (e) => updateStockValue(item.id, 'current', e.target.value));
+        // Track if blur is caused by TAB key
+        let isTabBlur = false;
+        
+        currentInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                isTabBlur = true;
+            }
+        });
+        
+        currentInput.addEventListener('blur', (e) => {
+            // If blur is caused by TAB, delay the update to allow focus to move first
+            if (isTabBlur) {
+                isTabBlur = false;
+                // Delay update until after focus has moved
+                setTimeout(() => {
+                    updateStockValue(item.id, 'current', e.target.value, true);
+                }, 50);
+            } else {
+                // Normal blur (clicking away, etc.) - update immediately
+                updateStockValue(item.id, 'current', e.target.value, false);
+            }
+        });
         currentInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.target.blur();
@@ -429,7 +450,28 @@ function addStockItemEventListeners(item, index) {
     }
     
     if (minimumInput && isAdmin) {
-        minimumInput.addEventListener('blur', (e) => updateStockValue(item.id, 'minimum', e.target.value));
+        // Track if blur is caused by TAB key
+        let isTabBlur = false;
+        
+        minimumInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                isTabBlur = true;
+            }
+        });
+        
+        minimumInput.addEventListener('blur', (e) => {
+            // If blur is caused by TAB, delay the update to allow focus to move first
+            if (isTabBlur) {
+                isTabBlur = false;
+                // Delay update until after focus has moved
+                setTimeout(() => {
+                    updateStockValue(item.id, 'minimum', e.target.value, true);
+                }, 50);
+            } else {
+                // Normal blur (clicking away, etc.) - update immediately
+                updateStockValue(item.id, 'minimum', e.target.value, false);
+            }
+        });
         minimumInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.target.blur();
@@ -446,17 +488,19 @@ function addStockItemEventListeners(item, index) {
     }
 }
 
-function updateStockValue(itemId, field, value) {
+function updateStockValue(itemId, field, value, isTabBlur = false) {
     const item = stockData.find(i => i.id === itemId);
     if (!item) return;
     
-    // Save current focus state
+    // Save current focus state (where focus is NOW, after TAB moved it)
     const activeElement = document.activeElement;
     let shouldRestoreFocus = false;
     let focusItemId = null;
     let focusField = null;
     
-    if (activeElement && activeElement.classList.contains('stock-input')) {
+    // If TAB was pressed, focus should already be on the next element
+    // We want to preserve that focus, not restore to the old one
+    if (isTabBlur && activeElement && activeElement.classList.contains('stock-input')) {
         shouldRestoreFocus = true;
         focusItemId = activeElement.getAttribute('data-id');
         focusField = activeElement.getAttribute('data-field');
@@ -467,7 +511,10 @@ function updateStockValue(itemId, field, value) {
     if (isNaN(numValue) || numValue < 0) {
         showFieldError(itemId, field, 'Voer een geldig getal in (≥ 0)');
         // Reset to original value
-        document.querySelector(`.${field}-input[data-id="${itemId}"]`).value = item[field];
+        const input = document.querySelector(`.${field}-input[data-id="${itemId}"]`);
+        if (input) {
+            input.value = item[field];
+        }
         return;
     }
     
@@ -487,39 +534,70 @@ function updateStockValue(itemId, field, value) {
     saveToLocalStorage();
     updateLastModifiedInfo();
     
-    // Re-render to update visual feedback
-    renderStockGrid();
-    
-    // Restore focus with better timing and more specific selector
-    if (shouldRestoreFocus && focusItemId && focusField) {
-        // Use multiple animation frames to ensure DOM is fully ready
-        requestAnimationFrame(() => {
+    // Only re-render if NOT a TAB blur (to preserve focus movement)
+    // Or re-render but preserve the new focus position
+    if (isTabBlur) {
+        // For TAB blur, just update the visual feedback without full re-render
+        // Update the specific item's visual state
+        const stockItem = document.querySelector(`.stock-item[data-id="${itemId}"]`);
+        if (stockItem) {
+            // Update classes for low-stock indication
+            const isLowStock = item.current < item.minimum;
+            const isNearMinimum = item.current <= item.minimum + 2;
+            stockItem.classList.remove('low-stock', 'near-minimum');
+            if (isLowStock) {
+                stockItem.classList.add('low-stock');
+            } else if (isNearMinimum) {
+                stockItem.classList.add('near-minimum');
+            }
+        }
+        
+        // Restore focus to where it should be (the next element after TAB)
+        if (shouldRestoreFocus && focusItemId && focusField) {
             requestAnimationFrame(() => {
-                // Use a more specific selector to ensure we get the right element
                 const input = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"][data-field="${focusField}"]`);
                 if (input) {
-                    // Prevent any default focus behavior and scroll
                     input.focus({ preventScroll: true });
-                    // Select the text if it's a number input
-                    if (input.type === 'number') {
-                        input.select();
-                    }
                 } else {
-                    // Fallback: try without data-field attribute
                     const fallbackInput = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"]`);
                     if (fallbackInput) {
                         fallbackInput.focus({ preventScroll: true });
-                        if (fallbackInput.type === 'number') {
-                            fallbackInput.select();
-                        }
                     }
                 }
             });
-        });
+        }
+    } else {
+        // Normal blur - do full re-render
+        renderStockGrid();
+        
+        // Restore focus if needed
+        if (shouldRestoreFocus && focusItemId && focusField) {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const input = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"][data-field="${focusField}"]`);
+                    if (input) {
+                        input.focus({ preventScroll: true });
+                        if (input.type === 'number') {
+                            input.select();
+                        }
+                    } else {
+                        const fallbackInput = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"]`);
+                        if (fallbackInput) {
+                            fallbackInput.focus({ preventScroll: true });
+                            if (fallbackInput.type === 'number') {
+                                fallbackInput.select();
+                            }
+                        }
+                    }
+                });
+            });
+        }
     }
     
-    // Show toast after focus is restored
-    showToast('Stock bijgewerkt', 'success');
+    // Show toast (silently for TAB to avoid interruption)
+    if (!isTabBlur) {
+        showToast('Stock bijgewerkt', 'success');
+    }
 }
 
 function showFieldError(itemId, field, message) {
