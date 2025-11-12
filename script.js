@@ -4,7 +4,7 @@ let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
 const adminPassword = 'battlekart2025';
-const APP_VERSION = '2.1.0'; // Version number for tracking updates
+const APP_VERSION = '2.1.1'; // Version number for tracking updates
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -436,6 +436,18 @@ function updateStockValue(itemId, field, value) {
     const item = stockData.find(i => i.id === itemId);
     if (!item) return;
     
+    // Save current focus state
+    const activeElement = document.activeElement;
+    let shouldRestoreFocus = false;
+    let focusItemId = null;
+    let focusField = null;
+    
+    if (activeElement && activeElement.classList.contains('stock-input')) {
+        shouldRestoreFocus = true;
+        focusItemId = activeElement.getAttribute('data-id');
+        focusField = activeElement.getAttribute('data-field');
+    }
+    
     // Validation
     const numValue = parseInt(value);
     if (isNaN(numValue) || numValue < 0) {
@@ -464,6 +476,20 @@ function updateStockValue(itemId, field, value) {
     
     // Re-render to update visual feedback
     renderStockGrid();
+    
+    // Restore focus if it was on an input field
+    if (shouldRestoreFocus && focusItemId && focusField) {
+        setTimeout(() => {
+            const input = document.querySelector(`.${focusField}-input[data-id="${focusItemId}"]`);
+            if (input) {
+                input.focus();
+                // Select the text if it's a number input
+                if (input.type === 'number') {
+                    input.select();
+                }
+            }
+        }, 10);
+    }
 }
 
 function showFieldError(itemId, field, message) {
