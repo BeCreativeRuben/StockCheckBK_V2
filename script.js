@@ -4,7 +4,7 @@ let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
 const adminPassword = 'battlekart2025';
-const APP_VERSION = '2.1.1'; // Version number for tracking updates
+const APP_VERSION = '2.1.2'; // Version number for tracking updates
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -472,24 +472,29 @@ function updateStockValue(itemId, field, value) {
     
     saveToLocalStorage();
     updateLastModifiedInfo();
-    showToast('Stock bijgewerkt', 'success');
     
     // Re-render to update visual feedback
     renderStockGrid();
     
-    // Restore focus if it was on an input field
+    // Restore focus BEFORE showing toast to prevent focus loss
     if (shouldRestoreFocus && focusItemId && focusField) {
-        setTimeout(() => {
-            const input = document.querySelector(`.${focusField}-input[data-id="${focusItemId}"]`);
-            if (input) {
-                input.focus();
-                // Select the text if it's a number input
-                if (input.type === 'number') {
-                    input.select();
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                const input = document.querySelector(`.${focusField}-input[data-id="${focusItemId}"]`);
+                if (input) {
+                    input.focus();
+                    // Select the text if it's a number input
+                    if (input.type === 'number') {
+                        input.select();
+                    }
                 }
-            }
-        }, 10);
+            }, 0);
+        });
     }
+    
+    // Show toast after focus is restored
+    showToast('Stock bijgewerkt', 'success');
 }
 
 function showFieldError(itemId, field, message) {
@@ -918,6 +923,8 @@ function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
+    toast.setAttribute('tabindex', '-1'); // Prevent toast from stealing focus
+    toast.setAttribute('aria-live', 'polite'); // Screen reader support
     
     container.appendChild(toast);
     
