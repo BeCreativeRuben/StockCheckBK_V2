@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Battlekart Stock Management System</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css" id="stylesLink">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -159,7 +159,20 @@
     <!-- Toast Notifications -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="script.js"></script>
+    <script>
+        // Cache busting - update version parameter when APP_VERSION changes
+        (function() {
+            const version = '2.1.0'; // Must match APP_VERSION in script.js
+            const stylesLink = document.getElementById('stylesLink');
+            if (stylesLink) {
+                stylesLink.href = `styles.css?v=${version}`;
+            }
+            
+            const script = document.createElement('script');
+            script.src = `script.js?v=${version}`;
+            document.body.appendChild(script);
+        })();
+    </script>
 </body>
 </html>
 
