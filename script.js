@@ -3,55 +3,16 @@ let currentUser = null;
 let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
-let lastKnownModifiedDate = null;
-let realtimeSyncInterval = null;
-let pendingUpdates = []; // Batch queue voor updates
-let batchSyncTimeout = null; // Timeout voor debouncing
-const REALTIME_SYNC_INTERVAL = 30000; // 30 seconden - interval voor realtime updates
-const BATCH_SYNC_DELAY = 1000; // 1 seconde wachten na laatste wijziging voor batch sync
 const adminPassword = 'battlekart2025';
-// IMPORTANT: After deploying Google Apps Script as Web App, paste the Web App URL here:
-// Example: const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
-const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9yszMiK_-V58_h-9-zyn7a5HhY0T0PdO0tPmAcjyNkGohgsThzDtXjptacOFftTn5g/exec';
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
 });
 
-// Stop realtime sync bij page unload en probeer pending updates te flush
+// Save data before page unload
 window.addEventListener('beforeunload', () => {
-    stopRealtimeSync();
-    // Flush pending updates before page unload (niet altijd betrouwbaar, maar we proberen het)
-    if (pendingUpdates.length > 0 && batchSyncTimeout) {
-        clearTimeout(batchSyncTimeout);
-        // Gebruik fetch met keepalive flag (wordt mogelijk niet uitgevoerd, maar we proberen het)
-        if (GOOGLE_APPS_SCRIPT_URL && pendingUpdates.length === 1) {
-            const update = pendingUpdates[0];
-            fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'updateItem',
-                    item: { id: update.itemId, value: update.value },
-                    field: update.field,
-                    user: currentUser
-                }),
-                keepalive: true
-            }).catch(() => {}); // Ignore errors, we're leaving anyway
-        } else if (GOOGLE_APPS_SCRIPT_URL && pendingUpdates.length > 1) {
-            fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'updateBatch',
-                    updates: pendingUpdates,
-                    user: currentUser
-                }),
-                keepalive: true
-            }).catch(() => {}); // Ignore errors, we're leaving anyway
-        }
-    }
+    saveToLocalStorage();
 });
 
 function initializeApp() {
@@ -94,7 +55,6 @@ function checkUserSession() {
         isAdmin = storedAdmin;
         updateUserDisplay();
         loadStockData();
-        startRealtimeSync();
     } else {
         showLoginModal();
     }
@@ -123,17 +83,10 @@ function handleUserLogin(e) {
     updateUserDisplay();
     hideLoginModal();
     loadStockData();
-    startRealtimeSync();
 }
 
 function handleLogout() {
-    stopRealtimeSync();
-    // Flush pending updates before logout
-    if (pendingUpdates.length > 0 && batchSyncTimeout) {
-        clearTimeout(batchSyncTimeout);
-        syncBatchToGoogleSheets();
-    }
-    pendingUpdates = [];
+    saveToLocalStorage();
     currentUser = null;
     isAdmin = false;
     sessionStorage.removeItem('currentUser');
@@ -210,54 +163,11 @@ function updateCategoryButtons() {
 }
 
 // Stock Data Management
-async function loadStockData() {
+function loadStockData() {
     try {
         showToast('Data laden...', 'info');
         
-        // Try to load from Google Apps Script
-        if (GOOGLE_APPS_SCRIPT_URL) {
-            try {
-                const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=read`);
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-                
-                const data = await response.json();
-                
-                if (!data.success) {
-                    throw new Error(data.error || 'Unknown error from Google Apps Script');
-                }
-                
-                if (data.items) {
-                    stockData = data.items;
-                    if (data.lastModified) {
-                        updateLastModifiedInfo(data.lastModified);
-                        // Bewaar de laatste wijzigingsdatum voor realtime sync
-                        if (data.lastModified.lastModifiedDate) {
-                            lastKnownModifiedDate = data.lastModified.lastModifiedDate;
-                        }
-                    }
-                    
-                    // Als de spreadsheet leeg is, initialiseer met default data
-                    if (stockData.length === 0) {
-                        initializeDefaultData();
-                    } else {
-                        renderStockGrid();
-                        saveToLocalStorage();
-                        showToast('Data geladen', 'success');
-                    }
-                    return;
-                }
-            } catch (fetchError) {
-                console.error('Error fetching from Google Apps Script:', fetchError);
-                console.error('Error details:', fetchError.message || fetchError.toString());
-                // Fall through to localStorage
-            }
-        }
-        
-        // Fallback to localStorage
+        // Load from localStorage
         loadFromLocalStorage();
         
         // If no data, initialize with default items
@@ -266,6 +176,7 @@ async function loadStockData() {
         }
         
         renderStockGrid();
+        showToast('Data geladen', 'success');
     } catch (error) {
         console.error('Error loading data:', error);
         loadFromLocalStorage();
@@ -275,7 +186,7 @@ async function loadStockData() {
         }
         
         renderStockGrid();
-        showToast('Fout bij laden data, gebruik lokale versie', 'error');
+        showToast('Fout bij laden data', 'error');
     }
 }
 
@@ -362,9 +273,6 @@ function initializeDefaultData() {
     }));
     
     saveToLocalStorage();
-    if (GOOGLE_APPS_SCRIPT_URL) {
-        syncToGoogleSheets();
-    }
 }
 
 function saveToLocalStorage() {
@@ -383,260 +291,15 @@ function loadFromLocalStorage() {
     }
 }
 
-// Sync batch of updates to Google Sheets (optimized)
-async function syncBatchToGoogleSheets() {
-    if (!GOOGLE_APPS_SCRIPT_URL || pendingUpdates.length === 0) return;
-    
-    // Make a copy of pending updates and clear the queue
-    const updatesToSync = [...pendingUpdates];
-    pendingUpdates = [];
-    batchSyncTimeout = null;
-    
+// Update last modified info (simplified - no server sync)
+function updateLastModifiedInfo() {
     try {
-        let response;
-        let data;
-        
-        // If only one update, use single item update (more efficient)
-        if (updatesToSync.length === 1) {
-            const update = updatesToSync[0];
-            const item = stockData.find(i => i.id === update.itemId);
-            
-            if (!item) {
-                console.warn('Item not found for update:', update.itemId);
-                return;
-            }
-            
-            response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'updateItem',
-                    item: {
-                        id: update.itemId,
-                        value: update.value
-                    },
-                    field: update.field,
-                    user: currentUser
-                })
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP ${response.status}: ${errorText}`);
-            }
-            
-            data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.error || 'Unknown error from Google Apps Script');
-            }
-            
-            if (data.lastModified) {
-                updateLastModifiedInfo(data.lastModified);
-            }
-        } else {
-            // Multiple updates: use batch update
-            response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'updateBatch',
-                    updates: updatesToSync,
-                    user: currentUser
-                })
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP ${response.status}: ${errorText}`);
-            }
-            
-            data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.error || 'Unknown error from Google Apps Script');
-            }
-            
-            if (data.lastModified) {
-                updateLastModifiedInfo(data.lastModified);
-            }
-        }
+        const now = new Date();
+        const dateString = now.toLocaleString('nl-NL');
+        const user = currentUser || 'Onbekend';
+        document.getElementById('lastModifiedText').textContent = `${user} - ${dateString}`;
     } catch (error) {
-        console.error('Error syncing batch to Google Sheets:', error);
-        console.error('Failed updates:', updatesToSync);
-        console.error('Google Apps Script URL:', GOOGLE_APPS_SCRIPT_URL);
-        
-        // Re-add failed updates to queue for retry
-        pendingUpdates = [...updatesToSync, ...pendingUpdates];
-        
-        // Show specific error message
-        const errorMsg = error.message || error.toString();
-        showToast(`Sync fout: ${errorMsg.substring(0, 50)}${errorMsg.length > 50 ? '...' : ''}`, 'error');
-    }
-}
-
-// Legacy function for full sync (still used for initial data push)
-async function syncToGoogleSheets() {
-    if (!GOOGLE_APPS_SCRIPT_URL) return;
-    
-    try {
-        const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                action: 'update',
-                items: stockData,
-                user: currentUser
-            })
-        });
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!data.success) {
-            throw new Error(data.error || 'Unknown error from Google Apps Script');
-        }
-        
-        if (data.lastModified) {
-            updateLastModifiedInfo(data.lastModified);
-        }
-    } catch (error) {
-        console.error('Error syncing to Google Sheets:', error);
-        console.error('Error details:', error.message || error.toString());
-        // Don't show error to user for full sync, just log it
-    }
-}
-
-function updateLastModifiedInfo(lastModified) {
-    if (lastModified && lastModified.lastModifiedDate) {
-        try {
-            const date = new Date(lastModified.lastModifiedDate);
-            const user = lastModified.lastModifiedBy || 'Onbekend';
-            const dateString = date.toLocaleString('nl-NL');
-            document.getElementById('lastModifiedText').textContent = `${user} - ${dateString}`;
-            // Update lastKnownModifiedDate voor realtime sync
-            lastKnownModifiedDate = lastModified.lastModifiedDate;
-        } catch (error) {
-            document.getElementById('lastModifiedText').textContent = '-';
-        }
-    } else {
         document.getElementById('lastModifiedText').textContent = '-';
-    }
-}
-
-// Realtime Sync - Check periodiek voor updates van andere gebruikers
-function startRealtimeSync() {
-    if (!GOOGLE_APPS_SCRIPT_URL) return;
-    
-    // Stop bestaande interval als die er is
-    stopRealtimeSync();
-    
-    // Start nieuwe interval
-    realtimeSyncInterval = setInterval(async () => {
-        await checkForUpdates();
-    }, REALTIME_SYNC_INTERVAL);
-    
-    console.log('Realtime sync gestart (elke 30 seconden)');
-}
-
-function stopRealtimeSync() {
-    if (realtimeSyncInterval) {
-        clearInterval(realtimeSyncInterval);
-        realtimeSyncInterval = null;
-        console.log('Realtime sync gestopt');
-    }
-}
-
-// Check of er updates zijn zonder de volledige data op te halen
-async function checkForUpdates() {
-    if (!GOOGLE_APPS_SCRIPT_URL || !currentUser) return;
-    
-    try {
-        // Haal alleen de config op (lichtgewicht - bevat LastModifiedDate)
-        const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=config`);
-        
-        if (!response.ok) {
-            console.debug('Realtime sync check failed: HTTP', response.status);
-            return;
-        }
-        
-        const data = await response.json();
-        
-        if (!data.success) {
-            console.debug('Realtime sync check failed:', data.error);
-            return;
-        }
-        
-        if (data.lastModified && data.lastModified.lastModifiedDate) {
-            const serverModifiedDate = data.lastModified.lastModifiedDate;
-            const serverModifiedBy = data.lastModified.lastModifiedBy;
-            
-            // Check of er een wijziging is
-            if (lastKnownModifiedDate && serverModifiedDate !== lastKnownModifiedDate) {
-                // Alleen toast tonen als het niet door de huidige gebruiker is
-                const isOwnChange = serverModifiedBy === currentUser;
-                
-                // Er is een wijziging, haal de volledige data op
-                await loadStockDataSilent();
-                
-                // Toon toast alleen als het niet onze eigen wijziging is
-                if (!isOwnChange) {
-                    showToast('🔄 Data bijgewerkt', 'info');
-                }
-            } else if (!lastKnownModifiedDate) {
-                // Eerste keer - initialiseer lastKnownModifiedDate
-                lastKnownModifiedDate = serverModifiedDate;
-            }
-        }
-    } catch (error) {
-        // Stil falen - log alleen in console
-        console.debug('Realtime sync check gefaald:', error);
-    }
-}
-
-// Silent load zonder toast notifications (voor realtime updates)
-async function loadStockDataSilent() {
-    try {
-        if (GOOGLE_APPS_SCRIPT_URL) {
-            try {
-                const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=read`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.items) {
-                        stockData = data.items;
-                        if (data.lastModified) {
-                            updateLastModifiedInfo(data.lastModified);
-                            if (data.lastModified.lastModifiedDate) {
-                                lastKnownModifiedDate = data.lastModified.lastModifiedDate;
-                            }
-                        }
-                        renderStockGrid();
-                        saveToLocalStorage();
-                        return;
-                    }
-                }
-            } catch (fetchError) {
-                console.error('Error fetching from Google Apps Script:', fetchError);
-            }
-        }
-        
-        // Fallback to localStorage
-        loadFromLocalStorage();
-        renderStockGrid();
-    } catch (error) {
-        console.error('Error loading data:', error);
-        loadFromLocalStorage();
-        renderStockGrid();
     }
 }
 
@@ -735,7 +398,7 @@ function addStockItemEventListeners(item) {
     }
 }
 
-async function updateStockValue(itemId, field, value) {
+function updateStockValue(itemId, field, value) {
     const item = stockData.find(i => i.id === itemId);
     if (!item) return;
     
@@ -762,31 +425,7 @@ async function updateStockValue(itemId, field, value) {
     item.modifiedBy = currentUser;
     
     saveToLocalStorage();
-    
-    // Add to batch queue (only the changed item)
-    if (GOOGLE_APPS_SCRIPT_URL) {
-        // Remove any existing update for this item+field combination
-        pendingUpdates = pendingUpdates.filter(u => !(u.itemId === itemId && u.field === field));
-        
-        // Add new update
-        pendingUpdates.push({
-            itemId: itemId,
-            field: field,
-            value: numValue,
-            oldValue: oldValue
-        });
-        
-        // Clear existing timeout
-        if (batchSyncTimeout) {
-            clearTimeout(batchSyncTimeout);
-        }
-        
-        // Schedule batch sync with debouncing
-        batchSyncTimeout = setTimeout(async () => {
-            await syncBatchToGoogleSheets();
-        }, BATCH_SYNC_DELAY);
-    }
-    
+    updateLastModifiedInfo();
     showToast('Stock bijgewerkt', 'success');
     
     // Re-render to update visual feedback
@@ -966,7 +605,7 @@ function exportToExcel() {
 }
 
 // Clear All Stock
-async function clearAllStock() {
+function clearAllStock() {
     if (!currentUser) {
         showToast('Log eerst in', 'error');
         return;
@@ -983,40 +622,8 @@ async function clearAllStock() {
     });
     
     saveToLocalStorage();
-    
-    if (GOOGLE_APPS_SCRIPT_URL) {
-        try {
-            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'reset',
-                    user: currentUser
-                })
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP ${response.status}: ${errorText}`);
-            }
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.error || 'Unknown error from Google Apps Script');
-            }
-            
-            showToast('Alle stock gereset', 'success');
-        } catch (error) {
-            console.error('Error resetting stock:', error);
-            showToast(`Fout bij sync: ${error.message || error.toString()}`, 'error');
-        }
-    } else {
-        showToast('Alle stock gereset', 'success');
-    }
-    
+    updateLastModifiedInfo();
+    showToast('Alle stock gereset', 'success');
     renderStockGrid();
 }
 
@@ -1116,11 +723,7 @@ function saveAdminItem(itemId) {
     item.modifiedBy = currentUser;
     
     saveToLocalStorage();
-    
-    if (GOOGLE_APPS_SCRIPT_URL) {
-        syncToGoogleSheets();
-    }
-    
+    updateLastModifiedInfo();
     showToast('Item bijgewerkt', 'success');
     renderStockGrid();
 }
@@ -1135,11 +738,7 @@ function deleteAdminItem(itemId) {
     
     stockData = stockData.filter(i => i.id !== itemId);
     saveToLocalStorage();
-    
-    if (GOOGLE_APPS_SCRIPT_URL) {
-        syncToGoogleSheets();
-    }
-    
+    updateLastModifiedInfo();
     showToast('Item verwijderd', 'success');
     renderAdminItemsList();
     renderStockGrid();
@@ -1176,10 +775,7 @@ function addNewItem(e) {
     
     stockData.push(newItem);
     saveToLocalStorage();
-    
-    if (GOOGLE_APPS_SCRIPT_URL) {
-        syncToGoogleSheets();
-    }
+    updateLastModifiedInfo();
     
     // Reset form
     document.getElementById('addItemForm').reset();

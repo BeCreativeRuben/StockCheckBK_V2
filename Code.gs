@@ -9,6 +9,21 @@ const SHEET_STOCK_DATA = 'Stock Data';
 const SHEET_LOGGING = 'Logging';
 const SHEET_CONFIG = 'Config';
 
+// Helper function to add CORS headers
+function setCorsHeaders(output) {
+  // Add CORS headers to allow cross-origin requests
+  return output.setHeaders({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  });
+}
+
+// Handle OPTIONS requests (CORS preflight)
+function doOptions() {
+  return setCorsHeaders(ContentService.createTextOutput(''));
+}
+
 // Get Spreadsheet
 function getSpreadsheet() {
   try {
@@ -54,49 +69,62 @@ function doGet(e) {
   const action = e.parameter.action;
   
   try {
+    let result;
     if (action === 'read') {
-      return readStockData();
+      result = readStockData();
     } else if (action === 'config') {
-      return getConfig();
+      result = getConfig();
     } else {
-      return ContentService.createTextOutput(JSON.stringify({
+      result = ContentService.createTextOutput(JSON.stringify({
         success: false,
         error: 'Invalid action'
-      })).setMimeType(ContentService.MimeType.JSON);
+      }));
     }
+    return setCorsHeaders(result);
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
+    return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({
       success: false,
       error: error.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    })));
   }
 }
 
 // Handle POST Requests
 function doPost(e) {
-  const data = JSON.parse(e.postData.contents);
+  let data;
+  try {
+    data = JSON.parse(e.postData.contents);
+  } catch (parseError) {
+    return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: 'Invalid JSON: ' + parseError.toString()
+    })));
+  }
+  
   const action = data.action;
   
   try {
+    let result;
     if (action === 'update') {
-      return updateStock(data);
+      result = updateStock(data);
     } else if (action === 'updateItem') {
-      return updateSingleItem(data);
+      result = updateSingleItem(data);
     } else if (action === 'updateBatch') {
-      return updateBatch(data);
+      result = updateBatch(data);
     } else if (action === 'reset') {
-      return resetStock(data);
+      result = resetStock(data);
     } else {
-      return ContentService.createTextOutput(JSON.stringify({
+      result = ContentService.createTextOutput(JSON.stringify({
         success: false,
         error: 'Invalid action'
-      })).setMimeType(ContentService.MimeType.JSON);
+      }));
     }
+    return setCorsHeaders(result);
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
+    return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({
       success: false,
       error: error.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    })));
   }
 }
 
