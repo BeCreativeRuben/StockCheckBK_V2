@@ -8,6 +8,7 @@ const SPREADSHEET_ID = '12gHHK06tSex6EOZuPsLaZMgsqk9gNv4XYqgF3Kp5Qqs';
 const SHEET_STOCK_DATA = 'Stock Data';
 const SHEET_LOGGING = 'Logging';
 const SHEET_CONFIG = 'Config';
+const SHEET_ORDER_LOGS = 'Order Logs';
 
 // Helper function to add CORS headers
 function setCorsHeaders(output) {
@@ -113,6 +114,8 @@ function doPost(e) {
       result = updateBatch(data);
     } else if (action === 'reset') {
       result = resetStock(data);
+    } else if (action === 'logOrderList') {
+      result = logOrderList(data);
     } else {
       result = ContentService.createTextOutput(JSON.stringify({
         success: false,
@@ -538,5 +541,54 @@ function updateConfig(user, timestamp) {
     const newRow = configSheet.getLastRow() + 1;
     configSheet.getRange(newRow, 1, 1, 2).setValues([['LastSync', timestamp]]);
   }
+}
+
+// Log Order List to Spreadsheet
+function logOrderList(data) {
+  const sheet = getSheet(SHEET_ORDER_LOGS);
+  const allItems = data.allItems || [];
+  const orderItems = data.orderItems || [];
+  const user = data.user || 'Unknown';
+  const now = new Date();
+  const timestamp = now.toISOString();
+  const dateString = now.toLocaleDateString('nl-NL');
+  const timeString = now.toLocaleTimeString('nl-NL');
+  
+  // Create header row if sheet is empty
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, 8).setValues([[
+      'Datum', 'Tijd', 'Gebruiker', 'Item', 'Categorie', 'Huidig', 'Minimum', 'Te Bestellen'
+    ]]);
+    sheet.getRange(1, 1, 1, 8).setFontWeight('bold');
+  }
+  
+  // Log all items (full stock snapshot at time of order list generation)
+  allItems.forEach(item => {
+    const toOrder = item.current < item.minimum ? item.minimum - item.current : 0;
+    const newRow = sheet.getLastRow() + 1;
+    
+    sheet.getRange(newRow, 1, 1, 8).setValues([[
+      dateString,
+      timeString,
+      user,
+      item.name || '',
+      item.category || '',
+      item.current || 0,
+      item.minimum || 0,
+      toOrder
+    ]]);
+  });
+  
+  // Add separator row
+  const separatorRow = sheet.getLastRow() + 1;
+  sheet.getRange(separatorRow, 1, 1, 8).setValues([[
+    '---', '---', '---', '---', '---', '---', '---', '---'
+  ]]);
+  
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    message: 'Order list logged successfully',
+    timestamp: timestamp
+  })).setMimeType(ContentService.MimeType.JSON);
 }
 

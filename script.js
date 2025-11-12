@@ -4,7 +4,9 @@ let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
 const adminPassword = 'battlekart2025';
-const APP_VERSION = '2.2.0'; // Version number for tracking updates
+const APP_VERSION = '2.3.0'; // Version number for tracking updates
+// Google Apps Script URL for logging only (optional - leave empty to disable logging)
+const LOGGING_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9yszMiK_-V58_h-9-zyn7a5HhY0T0PdO0tPmAcjyNkGohgsThzDtXjptacOFftTn5g/exec';
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -696,7 +698,7 @@ function closeOrderListModal() {
     document.getElementById('orderListModal').classList.remove('show');
 }
 
-function copyOrderList() {
+async function copyOrderList() {
     const orderItems = stockData.filter(item => item.current < item.minimum);
     
     if (orderItems.length === 0) {
@@ -727,6 +729,37 @@ function copyOrderList() {
     text += `SAMENVATTING:\n`;
     text += `Totaal aantal items: ${orderItems.length}\n`;
     text += `Totale hoeveelheid te bestellen: ${totalToOrder}\n`;
+    
+    // Log to Google Sheets if URL is configured
+    if (LOGGING_SCRIPT_URL) {
+        try {
+            // Sort all items by sortOrder for logging
+            const sortedAllItems = [...stockData].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            
+            const response = await fetch(LOGGING_SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'logOrderList',
+                    allItems: sortedAllItems,
+                    orderItems: orderItems,
+                    user: currentUser
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    console.log('Order list logged to spreadsheet');
+                }
+            }
+        } catch (error) {
+            console.error('Error logging to spreadsheet:', error);
+            // Don't show error to user - logging is optional
+        }
+    }
     
     navigator.clipboard.writeText(text).then(() => {
         showToast('✅ Gekopieerd!', 'success');
