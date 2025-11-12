@@ -326,39 +326,44 @@ function renderStockGrid() {
         return;
     }
     
-    grid.innerHTML = filteredData.map(item => createStockItemHTML(item)).join('');
+    grid.innerHTML = filteredData.map((item, index) => createStockItemHTML(item, index)).join('');
     
-    // Add event listeners
-    filteredData.forEach(item => {
-        addStockItemEventListeners(item);
+    // Add event listeners and set tabindex
+    filteredData.forEach((item, index) => {
+        addStockItemEventListeners(item, index);
     });
 }
 
-function createStockItemHTML(item) {
+function createStockItemHTML(item, index) {
     const isLowStock = item.current < item.minimum;
     const isNearMinimum = item.current <= item.minimum + 2;
     const statusClass = isLowStock ? 'low-stock' : isNearMinimum ? 'near-minimum' : '';
     
+    // Calculate tabindex: current input gets index*2, minimum input gets index*2+1 (if admin)
+    const currentTabIndex = index * 2 + 1; // Start from 1 (0 is usually reserved for other elements)
+    const minimumTabIndex = isAdmin ? index * 2 + 2 : -1; // Only tabbable if admin
+    
     return `
         <div class="stock-item ${statusClass}" data-id="${item.id}">
             <div class="stock-item-header">
-                <span class="stock-item-name">${escapeHtml(item.name)}</span>
-                <span class="category-badge ${item.category}">${item.category.toUpperCase()}</span>
+                <span class="stock-item-name" tabindex="-1">${escapeHtml(item.name)}</span>
+                <span class="category-badge ${item.category}" tabindex="-1">${item.category.toUpperCase()}</span>
             </div>
             <div class="stock-item-body">
                 <div class="stock-field">
-                    <label>Huidige Stock</label>
+                    <label tabindex="-1">Huidige Stock</label>
                     <input type="number" 
                            class="stock-input current-input" 
                            data-id="${item.id}" 
                            data-field="current"
                            value="${item.current}" 
                            min="0" 
-                           step="1">
-                    <span class="error-message" id="error-current-${item.id}"></span>
+                           step="1"
+                           tabindex="${currentTabIndex}">
+                    <span class="error-message" id="error-current-${item.id}" tabindex="-1"></span>
                 </div>
                 <div class="stock-field">
-                    <label>Minimum</label>
+                    <label tabindex="-1">Minimum</label>
                     <input type="number" 
                            class="stock-input minimum-input ${isAdmin ? '' : 'readonly'}" 
                            data-id="${item.id}" 
@@ -366,16 +371,17 @@ function createStockItemHTML(item) {
                            value="${item.minimum}" 
                            min="0" 
                            step="1"
+                           tabindex="${minimumTabIndex}"
                            ${isAdmin ? '' : 'readonly'}>
-                    <span class="error-message" id="error-minimum-${item.id}"></span>
+                    <span class="error-message" id="error-minimum-${item.id}" tabindex="-1"></span>
                 </div>
-                <div class="stock-unit">${escapeHtml(item.unit)}</div>
+                <div class="stock-unit" tabindex="-1">${escapeHtml(item.unit)}</div>
             </div>
         </div>
     `;
 }
 
-function addStockItemEventListeners(item) {
+function addStockItemEventListeners(item, index) {
     const currentInput = document.querySelector(`.current-input[data-id="${item.id}"]`);
     const minimumInput = document.querySelector(`.minimum-input[data-id="${item.id}"]`);
     
@@ -384,6 +390,19 @@ function addStockItemEventListeners(item) {
         currentInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.target.blur();
+                // Move to next input (minimum if admin, or next item's current)
+                setTimeout(() => {
+                    if (isAdmin && minimumInput) {
+                        minimumInput.focus();
+                    } else {
+                        // Find next current input
+                        const allCurrentInputs = Array.from(document.querySelectorAll('.current-input'));
+                        const currentIndex = allCurrentInputs.indexOf(currentInput);
+                        if (currentIndex < allCurrentInputs.length - 1) {
+                            allCurrentInputs[currentIndex + 1].focus();
+                        }
+                    }
+                }, 10);
             }
         });
     }
@@ -393,6 +412,14 @@ function addStockItemEventListeners(item) {
         minimumInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.target.blur();
+                // Move to next item's current input
+                setTimeout(() => {
+                    const allCurrentInputs = Array.from(document.querySelectorAll('.current-input'));
+                    const currentIndex = allCurrentInputs.indexOf(currentInput);
+                    if (currentIndex < allCurrentInputs.length - 1) {
+                        allCurrentInputs[currentIndex + 1].focus();
+                    }
+                }, 10);
             }
         });
     }
