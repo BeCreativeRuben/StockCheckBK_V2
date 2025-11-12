@@ -4,7 +4,7 @@ let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
 const adminPassword = 'battlekart2025';
-const APP_VERSION = '2.1.2'; // Version number for tracking updates
+const APP_VERSION = '2.1.3'; // Version number for tracking updates
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -335,10 +335,24 @@ function renderStockGrid() {
     
     grid.innerHTML = filteredData.map((item, index) => createStockItemHTML(item, index)).join('');
     
+    // Prevent browser from auto-focusing first element
+    // Store if we should restore focus after render
+    const shouldRestoreFocusAfterRender = document.activeElement && 
+        document.activeElement.classList.contains('stock-input');
+    
     // Add event listeners and set tabindex
     filteredData.forEach((item, index) => {
         addStockItemEventListeners(item, index);
     });
+    
+    // If we had focus before render, don't let browser auto-focus first element
+    if (shouldRestoreFocusAfterRender) {
+        // Blur any auto-focused element
+        const firstInput = grid.querySelector('input.stock-input');
+        if (firstInput && document.activeElement === firstInput) {
+            firstInput.blur();
+        }
+    }
 }
 
 function createStockItemHTML(item, index) {
@@ -476,20 +490,31 @@ function updateStockValue(itemId, field, value) {
     // Re-render to update visual feedback
     renderStockGrid();
     
-    // Restore focus BEFORE showing toast to prevent focus loss
+    // Restore focus with better timing and more specific selector
     if (shouldRestoreFocus && focusItemId && focusField) {
-        // Use requestAnimationFrame to ensure DOM is ready
+        // Use multiple animation frames to ensure DOM is fully ready
         requestAnimationFrame(() => {
-            setTimeout(() => {
-                const input = document.querySelector(`.${focusField}-input[data-id="${focusItemId}"]`);
+            requestAnimationFrame(() => {
+                // Use a more specific selector to ensure we get the right element
+                const input = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"][data-field="${focusField}"]`);
                 if (input) {
-                    input.focus();
+                    // Prevent any default focus behavior and scroll
+                    input.focus({ preventScroll: true });
                     // Select the text if it's a number input
                     if (input.type === 'number') {
                         input.select();
                     }
+                } else {
+                    // Fallback: try without data-field attribute
+                    const fallbackInput = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"]`);
+                    if (fallbackInput) {
+                        fallbackInput.focus({ preventScroll: true });
+                        if (fallbackInput.type === 'number') {
+                            fallbackInput.select();
+                        }
+                    }
                 }
-            }, 0);
+            });
         });
     }
     
