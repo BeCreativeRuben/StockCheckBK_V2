@@ -567,6 +567,66 @@ function copyOrderList() {
     });
 }
 
+function copyOrderListEmail() {
+    const orderItems = stockData.filter(item => item.current < item.minimum);
+    
+    if (orderItems.length === 0) {
+        showToast('Geen items om te bestellen', 'info');
+        return;
+    }
+    
+    orderItems.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    
+    // Helper function to extract unit type from unit string
+    function getUnitType(unit, amount) {
+        if (!unit) return amount > 1 ? 'Bakken' : 'Bak';
+        
+        const unitLower = unit.toLowerCase();
+        const isPlural = amount > 1;
+        
+        // Check for common patterns
+        if (unitLower.includes('krat') || unitLower.includes('bak')) {
+            return isPlural ? 'Bakken' : 'Bak';
+        }
+        if (unitLower.includes('doos') || unitLower.includes('dozen')) {
+            return isPlural ? 'Dozen' : 'Doos';
+        }
+        if (unitLower.includes('tray')) {
+            return isPlural ? 'Trays' : 'Tray';
+        }
+        if (unitLower.includes('vat') || unitLower.includes('vaten')) {
+            return isPlural ? 'Vaten' : 'Vat';
+        }
+        if (unitLower.includes('fles') || unitLower.includes('flessen')) {
+            return isPlural ? 'Flessen' : 'Fles';
+        }
+        
+        // Default: assume bak/bakken
+        return isPlural ? 'Bakken' : 'Bak';
+    }
+    
+    // Build email text
+    let emailText = `Beste Vanuxeem,\n\n`;
+    emailText += `Graag had ik volgende bestelling geplaatst voor Battlekart Gent:\n\n\n`;
+    
+    orderItems.forEach(item => {
+        const toOrder = item.minimum - item.current;
+        const unitType = getUnitType(item.unit, toOrder);
+        const productName = item.name;
+        
+        // Format: "Aantal UnitType ProductName"
+        emailText += `${toOrder} ${unitType} ${productName}\n`;
+    });
+    
+    emailText += `\nMet vriendelijke groet\n\nRuben Thielman`;
+    
+    navigator.clipboard.writeText(emailText).then(() => {
+        showToast('✅ Email gekopieerd!', 'success');
+    }).catch(() => {
+        showToast('Fout bij kopiëren', 'error');
+    });
+}
+
 // Excel Export
 function exportToExcel() {
     if (!currentUser) {
