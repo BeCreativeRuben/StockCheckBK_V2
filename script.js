@@ -12,8 +12,7 @@ const BATCH_SYNC_DELAY = 1000; // 1 seconde wachten na laatste wijziging voor ba
 const adminPassword = 'battlekart2025';
 // IMPORTANT: After deploying Google Apps Script as Web App, paste the Web App URL here:
 // Example: const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
-const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwtha4Hzc1pk-WjKCqrmL_r7EozWl8UG-sfV-U7-GTcMZ3RmK_bsGmcQNCEvUC3j4MuRQ/exec';
-https://script.google.com/macros/s/AKfycbwtha4Hzc1pk-WjKCqrmL_r7EozWl8UG-sfV-U7-GTcMZ3RmK_bsGmcQNCEvUC3j4MuRQ/exec
+const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9yszMiK_-V58_h-9-zyn7a5HhY0T0PdO0tPmAcjyNkGohgsThzDtXjptacOFftTn5g/exec';
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -219,31 +218,41 @@ async function loadStockData() {
         if (GOOGLE_APPS_SCRIPT_URL) {
             try {
                 const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=read`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.items) {
-                        stockData = data.items;
-                        if (data.lastModified) {
-                            updateLastModifiedInfo(data.lastModified);
-                            // Bewaar de laatste wijzigingsdatum voor realtime sync
-                            if (data.lastModified.lastModifiedDate) {
-                                lastKnownModifiedDate = data.lastModified.lastModifiedDate;
-                            }
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Unknown error from Google Apps Script');
+                }
+                
+                if (data.items) {
+                    stockData = data.items;
+                    if (data.lastModified) {
+                        updateLastModifiedInfo(data.lastModified);
+                        // Bewaar de laatste wijzigingsdatum voor realtime sync
+                        if (data.lastModified.lastModifiedDate) {
+                            lastKnownModifiedDate = data.lastModified.lastModifiedDate;
                         }
-                        
-                        // Als de spreadsheet leeg is, initialiseer met default data
-                        if (stockData.length === 0) {
-                            initializeDefaultData();
-                        } else {
-                            renderStockGrid();
-                            saveToLocalStorage();
-                            showToast('Data geladen', 'success');
-                        }
-                        return;
                     }
+                    
+                    // Als de spreadsheet leeg is, initialiseer met default data
+                    if (stockData.length === 0) {
+                        initializeDefaultData();
+                    } else {
+                        renderStockGrid();
+                        saveToLocalStorage();
+                        showToast('Data geladen', 'success');
+                    }
+                    return;
                 }
             } catch (fetchError) {
                 console.error('Error fetching from Google Apps Script:', fetchError);
+                console.error('Error details:', fetchError.message || fetchError.toString());
                 // Fall through to localStorage
             }
         }
@@ -384,38 +393,52 @@ async function syncBatchToGoogleSheets() {
     batchSyncTimeout = null;
     
     try {
+        let response;
+        let data;
+        
         // If only one update, use single item update (more efficient)
         if (updatesToSync.length === 1) {
             const update = updatesToSync[0];
             const item = stockData.find(i => i.id === update.itemId);
             
-            if (item) {
-                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
+            if (!item) {
+                console.warn('Item not found for update:', update.itemId);
+                return;
+            }
+            
+            response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'updateItem',
+                    item: {
+                        id: update.itemId,
+                        value: update.value
                     },
-                    body: JSON.stringify({
-                        action: 'updateItem',
-                        item: {
-                            id: update.itemId,
-                            value: update.value
-                        },
-                        field: update.field,
-                        user: currentUser
-                    })
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.lastModified) {
-                        updateLastModifiedInfo(data.lastModified);
-                    }
-                }
+                    field: update.field,
+                    user: currentUser
+                })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Unknown error from Google Apps Script');
+            }
+            
+            if (data.lastModified) {
+                updateLastModifiedInfo(data.lastModified);
             }
         } else {
             // Multiple updates: use batch update
-            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+            response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -427,18 +450,32 @@ async function syncBatchToGoogleSheets() {
                 })
             });
             
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.lastModified) {
-                    updateLastModifiedInfo(data.lastModified);
-                }
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Unknown error from Google Apps Script');
+            }
+            
+            if (data.lastModified) {
+                updateLastModifiedInfo(data.lastModified);
             }
         }
     } catch (error) {
         console.error('Error syncing batch to Google Sheets:', error);
+        console.error('Failed updates:', updatesToSync);
+        console.error('Google Apps Script URL:', GOOGLE_APPS_SCRIPT_URL);
+        
         // Re-add failed updates to queue for retry
         pendingUpdates = [...updatesToSync, ...pendingUpdates];
-        showToast('Fout bij sync, wordt opnieuw geprobeerd', 'error');
+        
+        // Show specific error message
+        const errorMsg = error.message || error.toString();
+        showToast(`Sync fout: ${errorMsg.substring(0, 50)}${errorMsg.length > 50 ? '...' : ''}`, 'error');
     }
 }
 
@@ -459,15 +496,24 @@ async function syncToGoogleSheets() {
             })
         });
         
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.lastModified) {
-                updateLastModifiedInfo(data.lastModified);
-            }
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Unknown error from Google Apps Script');
+        }
+        
+        if (data.lastModified) {
+            updateLastModifiedInfo(data.lastModified);
         }
     } catch (error) {
         console.error('Error syncing to Google Sheets:', error);
-        // Don't show error to user, just log it
+        console.error('Error details:', error.message || error.toString());
+        // Don't show error to user for full sync, just log it
     }
 }
 
@@ -518,28 +564,38 @@ async function checkForUpdates() {
     try {
         // Haal alleen de config op (lichtgewicht - bevat LastModifiedDate)
         const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?action=config`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.lastModified && data.lastModified.lastModifiedDate) {
-                const serverModifiedDate = data.lastModified.lastModifiedDate;
-                const serverModifiedBy = data.lastModified.lastModifiedBy;
+        
+        if (!response.ok) {
+            console.debug('Realtime sync check failed: HTTP', response.status);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            console.debug('Realtime sync check failed:', data.error);
+            return;
+        }
+        
+        if (data.lastModified && data.lastModified.lastModifiedDate) {
+            const serverModifiedDate = data.lastModified.lastModifiedDate;
+            const serverModifiedBy = data.lastModified.lastModifiedBy;
+            
+            // Check of er een wijziging is
+            if (lastKnownModifiedDate && serverModifiedDate !== lastKnownModifiedDate) {
+                // Alleen toast tonen als het niet door de huidige gebruiker is
+                const isOwnChange = serverModifiedBy === currentUser;
                 
-                // Check of er een wijziging is
-                if (lastKnownModifiedDate && serverModifiedDate !== lastKnownModifiedDate) {
-                    // Alleen toast tonen als het niet door de huidige gebruiker is
-                    const isOwnChange = serverModifiedBy === currentUser;
-                    
-                    // Er is een wijziging, haal de volledige data op
-                    await loadStockDataSilent();
-                    
-                    // Toon toast alleen als het niet onze eigen wijziging is
-                    if (!isOwnChange) {
-                        showToast('🔄 Data bijgewerkt', 'info');
-                    }
-                } else if (!lastKnownModifiedDate) {
-                    // Eerste keer - initialiseer lastKnownModifiedDate
-                    lastKnownModifiedDate = serverModifiedDate;
+                // Er is een wijziging, haal de volledige data op
+                await loadStockDataSilent();
+                
+                // Toon toast alleen als het niet onze eigen wijziging is
+                if (!isOwnChange) {
+                    showToast('🔄 Data bijgewerkt', 'info');
                 }
+            } else if (!lastKnownModifiedDate) {
+                // Eerste keer - initialiseer lastKnownModifiedDate
+                lastKnownModifiedDate = serverModifiedDate;
             }
         }
     } catch (error) {
@@ -930,7 +986,7 @@ async function clearAllStock() {
     
     if (GOOGLE_APPS_SCRIPT_URL) {
         try {
-            await fetch(GOOGLE_APPS_SCRIPT_URL, {
+            const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -940,9 +996,22 @@ async function clearAllStock() {
                     user: currentUser
                 })
             });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Unknown error from Google Apps Script');
+            }
+            
             showToast('Alle stock gereset', 'success');
         } catch (error) {
-            showToast('Fout bij sync, lokaal gereset', 'error');
+            console.error('Error resetting stock:', error);
+            showToast(`Fout bij sync: ${error.message || error.toString()}`, 'error');
         }
     } else {
         showToast('Alle stock gereset', 'success');
