@@ -4,6 +4,7 @@ let isAdmin = false;
 let currentCategory = 'all';
 let stockData = [];
 const adminPassword = 'battlekart2025';
+const APP_VERSION = '2.1.0'; // Version number for tracking updates
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -27,6 +28,12 @@ function updateCurrentDate() {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     const dateString = now.toLocaleDateString('nl-NL', options);
     document.getElementById('currentDate').textContent = dateString;
+    
+    // Display version number
+    const versionEl = document.getElementById('appVersion');
+    if (versionEl) {
+        versionEl.textContent = `v${APP_VERSION}`;
+    }
 }
 
 function setupEventListeners() {
