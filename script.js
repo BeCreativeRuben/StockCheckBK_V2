@@ -203,6 +203,33 @@ function detectUnitsPerBox(unit) {
     return 24;
 }
 
+// Migrate minimum values: multiply by unitsPerBox
+// Old minimum values were in "number of boxes/kraten", new minimum should be in units
+function migrateMinimumValues() {
+    let needsUpdate = false;
+    
+    stockData.forEach(item => {
+        // Check if minimum needs to be migrated (if it hasn't been migrated yet)
+        const unitsPerBox = item.unitsPerBox || detectUnitsPerBox(item.unit);
+        
+        // Check if migration flag exists - if not, this is old data that needs migration
+        if (!item.minimumMigrated) {
+            // Old minimum was in "number of boxes/kraten", new minimum should be in units
+            // Only migrate if minimum is reasonable (not already in units format)
+            // If minimum is less than unitsPerBox * 20, it's likely still in old format
+            if (item.minimum > 0 && item.minimum < unitsPerBox * 20) {
+                item.minimum = item.minimum * unitsPerBox;
+            }
+            item.minimumMigrated = true; // Flag to prevent re-migration
+            needsUpdate = true;
+        }
+    });
+    
+    if (needsUpdate) {
+        saveToLocalStorage();
+    }
+}
+
 // Migrate old data structure (current) to new structure (boxes + looseUnits)
 function migrateStockData() {
     let needsMigration = false;
@@ -257,6 +284,9 @@ function loadStockData() {
         // Migrate old data structure if needed
         migrateStockData();
         
+        // Migrate minimum values (multiply by unitsPerBox)
+        migrateMinimumValues();
+        
         // If no data, initialize with default items
         if (stockData.length === 0) {
             initializeDefaultData();
@@ -271,6 +301,9 @@ function loadStockData() {
         // Migrate old data structure if needed
         migrateStockData();
         
+        // Migrate minimum values (multiply by unitsPerBox)
+        migrateMinimumValues();
+        
         if (stockData.length === 0) {
             initializeDefaultData();
         }
@@ -282,64 +315,65 @@ function loadStockData() {
 
 function initializeDefaultData() {
     // Initialize with default items according to plan
+    // Note: minimum values are already in units (multiplied by unitsPerBox)
     const defaultItems = [
-        // Eerste Koelkast - Frisdranken
-        { id: 1, name: 'Cola', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 10, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 1 },
-        { id: 2, name: 'Cola zero', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 10, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 2 },
-        { id: 3, name: 'Fanta', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 3 },
-        { id: 4, name: 'Sprite', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 4 },
+        // Eerste Koelkast - Frisdranken (minimum was 10 bakken = 10 * 24 = 240 eenheden)
+        { id: 1, name: 'Cola', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 240, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 1 },
+        { id: 2, name: 'Cola zero', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 240, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 2 },
+        { id: 3, name: 'Fanta', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 3 },
+        { id: 4, name: 'Sprite', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 4 },
         
         // Tweede Koelkast - Ice Tea & Schweppes
-        { id: 5, name: 'Ice Tea', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 8, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 5 },
-        { id: 6, name: 'Ice Tea green', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 6 },
-        { id: 7, name: 'Schweppes ginger', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 7 },
-        { id: 8, name: 'Schweppes agrumes', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 8 },
-        { id: 9, name: 'Schweppes spritz', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 9 },
-        { id: 10, name: 'Schweppes tonic', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 10 },
+        { id: 5, name: 'Ice Tea', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 192, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 5 },
+        { id: 6, name: 'Ice Tea green', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 6 },
+        { id: 7, name: 'Schweppes ginger', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 7 },
+        { id: 8, name: 'Schweppes agrumes', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 8 },
+        { id: 9, name: 'Schweppes spritz', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 9 },
+        { id: 10, name: 'Schweppes tonic', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 10 },
         
         // Derde Koelkast - Sappen & Drankjes
-        { id: 11, name: 'Looza Orange', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 11 },
-        { id: 12, name: 'Looza ACE original', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 12 },
-        { id: 13, name: 'Looza apple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 13 },
-        { id: 14, name: 'Looza pineapple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 14 },
-        { id: 15, name: 'Looza appel-kers', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 15 },
-        { id: 16, name: 'Caprisun', category: 'drank', unit: 'doos (10-15 stuks)', minimum: 8, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 16 },
-        { id: 17, name: 'Cecemel', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 17 },
-        { id: 18, name: 'Fristi', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 18 },
-        { id: 19, name: 'Plat water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 19 },
-        { id: 20, name: 'Bruis water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 20 },
+        { id: 11, name: 'Looza Orange', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 11 },
+        { id: 12, name: 'Looza ACE original', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 12 },
+        { id: 13, name: 'Looza apple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 13 },
+        { id: 14, name: 'Looza pineapple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 14 },
+        { id: 15, name: 'Looza appel-kers', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 15 },
+        { id: 16, name: 'Caprisun', category: 'drank', unit: 'doos (10-15 stuks)', minimum: 96, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 16 },
+        { id: 17, name: 'Cecemel', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 17 },
+        { id: 18, name: 'Fristi', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 18 },
+        { id: 19, name: 'Plat water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 19 },
+        { id: 20, name: 'Bruis water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 20 },
         
         // Vierde Koelkast - Energy Drinks
-        { id: 21, name: 'RedBull', category: 'drank', unit: 'tray (24x25cl)', minimum: 6, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 21 },
+        { id: 21, name: 'RedBull', category: 'drank', unit: 'tray (24x25cl)', minimum: 144, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 21 },
         
         // Vijfde Koelkast - Bieren, Wijnen & Grote Flessen
-        { id: 22, name: 'Omer', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 6, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 22 },
+        { id: 22, name: 'Omer', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 144, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 22 },
         { id: 23, name: 'Martha', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 23 },
-        { id: 24, name: 'Wijn (wit)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 24 },
-        { id: 25, name: 'Wijn (rood)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 25 },
-        { id: 26, name: 'Wijn (rosé)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 26 },
-        { id: 27, name: 'Bubbels', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 27 },
+        { id: 24, name: 'Wijn (wit)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 18, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 24 },
+        { id: 25, name: 'Wijn (rood)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 18, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 25 },
+        { id: 26, name: 'Wijn (rosé)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 18, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 26 },
+        { id: 27, name: 'Bubbels', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 18, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 27 },
         
         // Zesde Koelkast - Alcoholvrij & Light Bieren
-        { id: 28, name: 'Stella 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 28 },
-        { id: 29, name: 'Hoegaarden rose', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 29 },
-        { id: 30, name: 'Ouwen Duiker', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 30 },
-        { id: 31, name: 'Sommersby appel', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 31 },
-        { id: 32, name: 'Corona', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 32 },
-        { id: 33, name: 'Corona 0.0%', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 33 },
+        { id: 28, name: 'Stella 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 28 },
+        { id: 29, name: 'Hoegaarden rose', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 29 },
+        { id: 30, name: 'Ouwen Duiker', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 30 },
+        { id: 31, name: 'Sommersby appel', category: 'drank', unit: 'tray (24x33cl)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 31 },
+        { id: 32, name: 'Corona', category: 'drank', unit: 'tray (24x33cl)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 32 },
+        { id: 33, name: 'Corona 0.0%', category: 'drank', unit: 'tray (24x33cl)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 33 },
         
         // Zevende Koelkast - Trappist & Premium Bieren
-        { id: 34, name: 'Orval', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 34 },
-        { id: 35, name: 'Chimay', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 35 },
-        { id: 36, name: 'Carlsberg', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 36 },
-        { id: 37, name: 'Carlsberg 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 37 },
-        { id: 38, name: 'Westmalle', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 38 },
+        { id: 34, name: 'Orval', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 34 },
+        { id: 35, name: 'Chimay', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 35 },
+        { id: 36, name: 'Carlsberg', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 36 },
+        { id: 37, name: 'Carlsberg 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 37 },
+        { id: 38, name: 'Westmalle', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 38 },
         
         // Achtste Koelkast - Stout & Speciale Bieren
-        { id: 39, name: 'Guinness', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 39 },
-        { id: 40, name: 'Paix Dieu', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 40 },
-        { id: 41, name: 'Duvel', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 8, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 41 },
-        { id: 42, name: 'Desperados', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 42 },
+        { id: 39, name: 'Guinness', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 39 },
+        { id: 40, name: 'Paix Dieu', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 40 },
+        { id: 41, name: 'Duvel', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 192, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 41 },
+        { id: 42, name: 'Desperados', category: 'drank', unit: 'tray (24x33cl)', minimum: 72, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 42 },
         
         // Items buiten koelkasten
         { id: 43, name: 'Gasflessen', category: 'drank', unit: 'flessen', minimum: 3, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 43 },
@@ -348,16 +382,17 @@ function initializeDefaultData() {
         { id: 46, name: 'Eristegy whisky', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 46 },
         { id: 47, name: 'Jameson whisky', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 47 },
         { id: 48, name: 'Bacardi', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 48 },
-        { id: 49, name: 'Hoegaarden', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 49 },
-        { id: 50, name: 'Stella', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 50 },
-        { id: 51, name: 'Gouwen Duvelen', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 51 },
-        { id: 52, name: 'Chips', category: 'eten', unit: 'dozen (multipack)', minimum: 3, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 52 },
-        { id: 53, name: 'Worstjes', category: 'eten', unit: 'dozen', minimum: 2, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 53 },
-        { id: 54, name: 'Aiki', category: 'eten', unit: 'dozen', minimum: 2, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 54 }
+        { id: 49, name: 'Hoegaarden', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 49 },
+        { id: 50, name: 'Stella', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 50 },
+        { id: 51, name: 'Gouwen Duvelen', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 120, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 51 },
+        { id: 52, name: 'Chips', category: 'eten', unit: 'dozen (multipack)', minimum: 36, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 52 },
+        { id: 53, name: 'Worstjes', category: 'eten', unit: 'dozen', minimum: 24, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 53 },
+        { id: 54, name: 'Aiki', category: 'eten', unit: 'dozen', minimum: 24, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 54 }
     ];
     
     stockData = defaultItems.map(item => ({
         ...item,
+        minimumMigrated: true, // Mark as already migrated for new installations
         lastModified: new Date().toISOString(),
         modifiedBy: currentUser || 'System'
     }));
