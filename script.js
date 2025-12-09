@@ -172,12 +172,90 @@ function updateCategoryButtons() {
 }
 
 // Stock Data Management
+// Helper function to calculate total stock from boxes and loose units
+function calculateTotalStock(item) {
+    const boxes = item.boxes || 0;
+    const looseUnits = item.looseUnits || 0;
+    const unitsPerBox = item.unitsPerBox || 1;
+    return (boxes * unitsPerBox) + looseUnits;
+}
+
+// Helper function to detect unitsPerBox from unit string
+function detectUnitsPerBox(unit) {
+    if (!unit) return 24; // Default
+    
+    // Try to extract number from patterns like "24x25cl", "24x33cl", etc.
+    const match = unit.match(/(\d+)x/i);
+    if (match) {
+        return parseInt(match[1], 10);
+    }
+    
+    // Check for common patterns
+    const unitLower = unit.toLowerCase();
+    if (unitLower.includes('doos') && unitLower.includes('10-15')) {
+        return 12; // Average for 10-15 range
+    }
+    if (unitLower.includes('dozen') && unitLower.includes('6/12')) {
+        return 9; // Average for 6/12 range
+    }
+    
+    // Default fallback
+    return 24;
+}
+
+// Migrate old data structure (current) to new structure (boxes + looseUnits)
+function migrateStockData() {
+    let needsMigration = false;
+    
+    stockData.forEach(item => {
+        // Check if item needs migration (has current but no boxes/looseUnits)
+        if (item.current !== undefined && (item.boxes === undefined || item.looseUnits === undefined)) {
+            needsMigration = true;
+            
+            // Detect or set unitsPerBox
+            if (!item.unitsPerBox) {
+                item.unitsPerBox = detectUnitsPerBox(item.unit);
+            }
+            
+            const unitsPerBox = item.unitsPerBox || 24;
+            const totalUnits = item.current || 0;
+            
+            // Convert total units to boxes and loose units
+            item.boxes = Math.floor(totalUnits / unitsPerBox);
+            item.looseUnits = totalUnits % unitsPerBox;
+            
+            // Remove old current field (keep for now for safety, but don't use it)
+            // item.current is kept for backward compatibility but should not be used
+        }
+        
+        // Ensure unitsPerBox exists
+        if (!item.unitsPerBox) {
+            item.unitsPerBox = detectUnitsPerBox(item.unit);
+        }
+        
+        // Ensure boxes and looseUnits exist
+        if (item.boxes === undefined) {
+            item.boxes = 0;
+        }
+        if (item.looseUnits === undefined) {
+            item.looseUnits = 0;
+        }
+    });
+    
+    if (needsMigration) {
+        saveToLocalStorage();
+    }
+}
+
 function loadStockData() {
     try {
         showToast('Data laden...', 'info');
         
         // Load from localStorage
         loadFromLocalStorage();
+        
+        // Migrate old data structure if needed
+        migrateStockData();
         
         // If no data, initialize with default items
         if (stockData.length === 0) {
@@ -189,6 +267,9 @@ function loadStockData() {
     } catch (error) {
         console.error('Error loading data:', error);
         loadFromLocalStorage();
+        
+        // Migrate old data structure if needed
+        migrateStockData();
         
         if (stockData.length === 0) {
             initializeDefaultData();
@@ -203,76 +284,76 @@ function initializeDefaultData() {
     // Initialize with default items according to plan
     const defaultItems = [
         // Eerste Koelkast - Frisdranken
-        { id: 1, name: 'Cola', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 10, current: 0, sortOrder: 1 },
-        { id: 2, name: 'Cola zero', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 10, current: 0, sortOrder: 2 },
-        { id: 3, name: 'Fanta', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, current: 0, sortOrder: 3 },
-        { id: 4, name: 'Sprite', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, current: 0, sortOrder: 4 },
+        { id: 1, name: 'Cola', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 10, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 1 },
+        { id: 2, name: 'Cola zero', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 10, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 2 },
+        { id: 3, name: 'Fanta', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 3 },
+        { id: 4, name: 'Sprite', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 4 },
         
         // Tweede Koelkast - Ice Tea & Schweppes
-        { id: 5, name: 'Ice Tea', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 8, current: 0, sortOrder: 5 },
-        { id: 6, name: 'Ice Tea green', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, current: 0, sortOrder: 6 },
-        { id: 7, name: 'Schweppes ginger', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, current: 0, sortOrder: 7 },
-        { id: 8, name: 'Schweppes agrumes', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, current: 0, sortOrder: 8 },
-        { id: 9, name: 'Schweppes spritz', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, current: 0, sortOrder: 9 },
-        { id: 10, name: 'Schweppes tonic', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 5, current: 0, sortOrder: 10 },
+        { id: 5, name: 'Ice Tea', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 8, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 5 },
+        { id: 6, name: 'Ice Tea green', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 6 },
+        { id: 7, name: 'Schweppes ginger', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 7 },
+        { id: 8, name: 'Schweppes agrumes', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 8 },
+        { id: 9, name: 'Schweppes spritz', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 9 },
+        { id: 10, name: 'Schweppes tonic', category: 'drank', unit: 'krat/bak (24x20cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 10 },
         
         // Derde Koelkast - Sappen & Drankjes
-        { id: 11, name: 'Looza Orange', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 5, current: 0, sortOrder: 11 },
-        { id: 12, name: 'Looza ACE original', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 5, current: 0, sortOrder: 12 },
-        { id: 13, name: 'Looza apple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, current: 0, sortOrder: 13 },
-        { id: 14, name: 'Looza pineapple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, current: 0, sortOrder: 14 },
-        { id: 15, name: 'Looza appel-kers', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, current: 0, sortOrder: 15 },
-        { id: 16, name: 'Caprisun', category: 'drank', unit: 'doos (10-15 stuks)', minimum: 8, current: 0, sortOrder: 16 },
-        { id: 17, name: 'Cecemel', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 3, current: 0, sortOrder: 17 },
-        { id: 18, name: 'Fristi', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 3, current: 0, sortOrder: 18 },
-        { id: 19, name: 'Plat water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, current: 0, sortOrder: 19 },
-        { id: 20, name: 'Bruis water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, current: 0, sortOrder: 20 },
+        { id: 11, name: 'Looza Orange', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 11 },
+        { id: 12, name: 'Looza ACE original', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 12 },
+        { id: 13, name: 'Looza apple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 13 },
+        { id: 14, name: 'Looza pineapple', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 14 },
+        { id: 15, name: 'Looza appel-kers', category: 'drank', unit: 'tray/fles (20cl/1L)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 15 },
+        { id: 16, name: 'Caprisun', category: 'drank', unit: 'doos (10-15 stuks)', minimum: 8, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 16 },
+        { id: 17, name: 'Cecemel', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 17 },
+        { id: 18, name: 'Fristi', category: 'drank', unit: 'tray (24x20cl of 6x20cl brik)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 18 },
+        { id: 19, name: 'Plat water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 19 },
+        { id: 20, name: 'Bruis water', category: 'drank', unit: 'krat/bak (24x25cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 20 },
         
         // Vierde Koelkast - Energy Drinks
-        { id: 21, name: 'RedBull', category: 'drank', unit: 'tray (24x25cl)', minimum: 6, current: 0, sortOrder: 21 },
+        { id: 21, name: 'RedBull', category: 'drank', unit: 'tray (24x25cl)', minimum: 6, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 21 },
         
         // Vijfde Koelkast - Bieren, Wijnen & Grote Flessen
-        { id: 22, name: 'Omer', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 6, current: 0, sortOrder: 22 },
-        { id: 23, name: 'Martha', category: 'drank', unit: 'flessen', minimum: 6, current: 0, sortOrder: 23 },
-        { id: 24, name: 'Wijn (wit)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, current: 0, sortOrder: 24 },
-        { id: 25, name: 'Wijn (rood)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, current: 0, sortOrder: 25 },
-        { id: 26, name: 'Wijn (rosé)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, current: 0, sortOrder: 26 },
-        { id: 27, name: 'Bubbels', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, current: 0, sortOrder: 27 },
+        { id: 22, name: 'Omer', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 6, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 22 },
+        { id: 23, name: 'Martha', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 23 },
+        { id: 24, name: 'Wijn (wit)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 24 },
+        { id: 25, name: 'Wijn (rood)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 25 },
+        { id: 26, name: 'Wijn (rosé)', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 26 },
+        { id: 27, name: 'Bubbels', category: 'drank', unit: 'dozen (6/12 flessen)', minimum: 2, unitsPerBox: 9, boxes: 0, looseUnits: 0, sortOrder: 27 },
         
         // Zesde Koelkast - Alcoholvrij & Light Bieren
-        { id: 28, name: 'Stella 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, current: 0, sortOrder: 28 },
-        { id: 29, name: 'Hoegaarden rose', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, current: 0, sortOrder: 29 },
-        { id: 30, name: 'Ouwen Duiker', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, current: 0, sortOrder: 30 },
-        { id: 31, name: 'Sommersby appel', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, current: 0, sortOrder: 31 },
-        { id: 32, name: 'Corona', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, current: 0, sortOrder: 32 },
-        { id: 33, name: 'Corona 0.0%', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, current: 0, sortOrder: 33 },
+        { id: 28, name: 'Stella 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 28 },
+        { id: 29, name: 'Hoegaarden rose', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 29 },
+        { id: 30, name: 'Ouwen Duiker', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 30 },
+        { id: 31, name: 'Sommersby appel', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 31 },
+        { id: 32, name: 'Corona', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 32 },
+        { id: 33, name: 'Corona 0.0%', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 33 },
         
         // Zevende Koelkast - Trappist & Premium Bieren
-        { id: 34, name: 'Orval', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, current: 0, sortOrder: 34 },
-        { id: 35, name: 'Chimay', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, current: 0, sortOrder: 35 },
-        { id: 36, name: 'Carlsberg', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, current: 0, sortOrder: 36 },
-        { id: 37, name: 'Carlsberg 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, current: 0, sortOrder: 37 },
-        { id: 38, name: 'Westmalle', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, current: 0, sortOrder: 38 },
+        { id: 34, name: 'Orval', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 34 },
+        { id: 35, name: 'Chimay', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 35 },
+        { id: 36, name: 'Carlsberg', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 36 },
+        { id: 37, name: 'Carlsberg 0.0%', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 37 },
+        { id: 38, name: 'Westmalle', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 38 },
         
         // Achtste Koelkast - Stout & Speciale Bieren
-        { id: 39, name: 'Guinness', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, current: 0, sortOrder: 39 },
-        { id: 40, name: 'Paix Dieu', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, current: 0, sortOrder: 40 },
-        { id: 41, name: 'Duvel', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 8, current: 0, sortOrder: 41 },
-        { id: 42, name: 'Desperados', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, current: 0, sortOrder: 42 },
+        { id: 39, name: 'Guinness', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 39 },
+        { id: 40, name: 'Paix Dieu', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 40 },
+        { id: 41, name: 'Duvel', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 8, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 41 },
+        { id: 42, name: 'Desperados', category: 'drank', unit: 'tray (24x33cl)', minimum: 3, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 42 },
         
         // Items buiten koelkasten
-        { id: 43, name: 'Gasflessen', category: 'drank', unit: 'flessen', minimum: 3, current: 0, sortOrder: 43 },
-        { id: 44, name: 'Caperol', category: 'drank', unit: 'flessen', minimum: 6, current: 0, sortOrder: 44 },
-        { id: 45, name: 'Gin', category: 'drank', unit: 'flessen', minimum: 6, current: 0, sortOrder: 45 },
-        { id: 46, name: 'Eristegy whisky', category: 'drank', unit: 'flessen', minimum: 6, current: 0, sortOrder: 46 },
-        { id: 47, name: 'Jameson whisky', category: 'drank', unit: 'flessen', minimum: 6, current: 0, sortOrder: 47 },
-        { id: 48, name: 'Bacardi', category: 'drank', unit: 'flessen', minimum: 6, current: 0, sortOrder: 48 },
-        { id: 49, name: 'Hoegaarden', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, current: 0, sortOrder: 49 },
-        { id: 50, name: 'Stella', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, current: 0, sortOrder: 50 },
-        { id: 51, name: 'Gouwen Duvelen', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, current: 0, sortOrder: 51 },
-        { id: 52, name: 'Chips', category: 'eten', unit: 'dozen (multipack)', minimum: 3, current: 0, sortOrder: 52 },
-        { id: 53, name: 'Worstjes', category: 'eten', unit: 'dozen', minimum: 2, current: 0, sortOrder: 53 },
-        { id: 54, name: 'Aiki', category: 'eten', unit: 'dozen', minimum: 2, current: 0, sortOrder: 54 }
+        { id: 43, name: 'Gasflessen', category: 'drank', unit: 'flessen', minimum: 3, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 43 },
+        { id: 44, name: 'Caperol', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 44 },
+        { id: 45, name: 'Gin', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 45 },
+        { id: 46, name: 'Eristegy whisky', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 46 },
+        { id: 47, name: 'Jameson whisky', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 47 },
+        { id: 48, name: 'Bacardi', category: 'drank', unit: 'flessen', minimum: 6, unitsPerBox: 1, boxes: 0, looseUnits: 0, sortOrder: 48 },
+        { id: 49, name: 'Hoegaarden', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 49 },
+        { id: 50, name: 'Stella', category: 'drank', unit: 'krat/bak (24x25cl/33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 50 },
+        { id: 51, name: 'Gouwen Duvelen', category: 'drank', unit: 'krat/bak (24x33cl)', minimum: 5, unitsPerBox: 24, boxes: 0, looseUnits: 0, sortOrder: 51 },
+        { id: 52, name: 'Chips', category: 'eten', unit: 'dozen (multipack)', minimum: 3, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 52 },
+        { id: 53, name: 'Worstjes', category: 'eten', unit: 'dozen', minimum: 2, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 53 },
+        { id: 54, name: 'Aiki', category: 'eten', unit: 'dozen', minimum: 2, unitsPerBox: 12, boxes: 0, looseUnits: 0, sortOrder: 54 }
     ];
     
     stockData = defaultItems.map(item => ({
@@ -340,7 +421,9 @@ function renderStockGrid() {
     // Prevent browser from auto-focusing first element
     // Store if we should restore focus after render
     const shouldRestoreFocusAfterRender = document.activeElement && 
-        document.activeElement.classList.contains('stock-input');
+        (document.activeElement.classList.contains('stock-input') || 
+         document.activeElement.classList.contains('boxes-input') ||
+         document.activeElement.classList.contains('loose-units-input'));
     
     // Add event listeners and set tabindex
     filteredData.forEach((item, index) => {
@@ -358,13 +441,18 @@ function renderStockGrid() {
 }
 
 function createStockItemHTML(item, index) {
-    const isLowStock = item.current < item.minimum;
-    const isNearMinimum = item.current <= item.minimum + 2;
+    const totalStock = calculateTotalStock(item);
+    const isLowStock = totalStock < item.minimum;
+    const isNearMinimum = totalStock <= item.minimum + 2;
     const statusClass = isLowStock ? 'low-stock' : isNearMinimum ? 'near-minimum' : '';
     
-    // Calculate tabindex: current input gets index*2, minimum input gets index*2+1 (if admin)
-    const currentTabIndex = index * 2 + 1; // Start from 1 (0 is usually reserved for other elements)
-    const minimumTabIndex = isAdmin ? index * 2 + 2 : -1; // Only tabbable if admin
+    const boxes = item.boxes || 0;
+    const looseUnits = item.looseUnits || 0;
+    
+    // Calculate tabindex: boxes gets index*3+1, looseUnits gets index*3+2, minimum gets index*3+3 (if admin)
+    const boxesTabIndex = index * 3 + 1;
+    const looseUnitsTabIndex = index * 3 + 2;
+    const minimumTabIndex = isAdmin ? index * 3 + 3 : -1;
     
     return `
         <div class="stock-item ${statusClass}" data-id="${item.id}">
@@ -374,16 +462,32 @@ function createStockItemHTML(item, index) {
             </div>
             <div class="stock-item-body">
                 <div class="stock-field">
-                    <label tabindex="-1">Huidige Stock</label>
+                    <label tabindex="-1">Bakken</label>
                     <input type="number" 
-                           class="stock-input current-input" 
+                           class="stock-input boxes-input" 
                            data-id="${item.id}" 
-                           data-field="current"
-                           value="${item.current}" 
+                           data-field="boxes"
+                           value="${boxes}" 
                            min="0" 
                            step="1"
-                           tabindex="${currentTabIndex}">
-                    <span class="error-message" id="error-current-${item.id}" tabindex="-1"></span>
+                           tabindex="${boxesTabIndex}">
+                    <span class="error-message" id="error-boxes-${item.id}" tabindex="-1"></span>
+                </div>
+                <div class="stock-field">
+                    <label tabindex="-1">Eenheden</label>
+                    <input type="number" 
+                           class="stock-input loose-units-input" 
+                           data-id="${item.id}" 
+                           data-field="looseUnits"
+                           value="${looseUnits}" 
+                           min="0" 
+                           step="1"
+                           tabindex="${looseUnitsTabIndex}">
+                    <span class="error-message" id="error-looseUnits-${item.id}" tabindex="-1"></span>
+                </div>
+                <div class="stock-field">
+                    <label tabindex="-1">Totaal</label>
+                    <div class="stock-total-display" tabindex="-1">${totalStock} eenheden</div>
                 </div>
                 <div class="stock-field">
                     <label tabindex="-1">Minimum</label>
@@ -398,52 +502,52 @@ function createStockItemHTML(item, index) {
                            ${isAdmin ? '' : 'readonly'}>
                     <span class="error-message" id="error-minimum-${item.id}" tabindex="-1"></span>
                 </div>
-                <div class="stock-unit" tabindex="-1">${escapeHtml(item.unit)}</div>
+                <div class="stock-unit" tabindex="-1">${escapeHtml(item.unit)} (${item.unitsPerBox || 24} per bak)</div>
             </div>
         </div>
     `;
 }
 
 function addStockItemEventListeners(item, index) {
-    const currentInput = document.querySelector(`.current-input[data-id="${item.id}"]`);
+    const boxesInput = document.querySelector(`.boxes-input[data-id="${item.id}"]`);
+    const looseUnitsInput = document.querySelector(`.loose-units-input[data-id="${item.id}"]`);
     const minimumInput = document.querySelector(`.minimum-input[data-id="${item.id}"]`);
     
-    if (currentInput) {
-        // Track if blur is caused by TAB key
+    // Helper function to add input listeners
+    function addInputListeners(input, field, nextInput) {
+        if (!input) return;
+        
         let isTabBlur = false;
         
-        currentInput.addEventListener('keydown', (e) => {
+        input.addEventListener('keydown', (e) => {
             if (e.key === 'Tab') {
                 isTabBlur = true;
             }
         });
         
-        currentInput.addEventListener('blur', (e) => {
-            // If blur is caused by TAB, delay the update to allow focus to move first
+        input.addEventListener('blur', (e) => {
             if (isTabBlur) {
                 isTabBlur = false;
-                // Delay update until after focus has moved
                 setTimeout(() => {
-                    updateStockValue(item.id, 'current', e.target.value, true);
+                    updateStockValue(item.id, field, e.target.value, true);
                 }, 50);
             } else {
-                // Normal blur (clicking away, etc.) - update immediately
-                updateStockValue(item.id, 'current', e.target.value, false);
+                updateStockValue(item.id, field, e.target.value, false);
             }
         });
-        currentInput.addEventListener('keypress', (e) => {
+        
+        input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.target.blur();
-                // Move to next input (minimum if admin, or next item's current)
                 setTimeout(() => {
-                    if (isAdmin && minimumInput) {
-                        minimumInput.focus();
+                    if (nextInput) {
+                        nextInput.focus();
                     } else {
-                        // Find next current input
-                        const allCurrentInputs = Array.from(document.querySelectorAll('.current-input'));
-                        const currentIndex = allCurrentInputs.indexOf(currentInput);
-                        if (currentIndex < allCurrentInputs.length - 1) {
-                            allCurrentInputs[currentIndex + 1].focus();
+                        // Find next boxes input
+                        const allBoxesInputs = Array.from(document.querySelectorAll('.boxes-input'));
+                        const currentIndex = allBoxesInputs.indexOf(boxesInput);
+                        if (currentIndex < allBoxesInputs.length - 1) {
+                            allBoxesInputs[currentIndex + 1].focus();
                         }
                     }
                 }, 10);
@@ -451,42 +555,12 @@ function addStockItemEventListeners(item, index) {
         });
     }
     
+    // Add listeners: boxes -> looseUnits -> minimum (if admin) -> next item's boxes
+    addInputListeners(boxesInput, 'boxes', looseUnitsInput);
+    addInputListeners(looseUnitsInput, 'looseUnits', isAdmin ? minimumInput : null);
+    
     if (minimumInput && isAdmin) {
-        // Track if blur is caused by TAB key
-        let isTabBlur = false;
-        
-        minimumInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
-                isTabBlur = true;
-            }
-        });
-        
-        minimumInput.addEventListener('blur', (e) => {
-            // If blur is caused by TAB, delay the update to allow focus to move first
-            if (isTabBlur) {
-                isTabBlur = false;
-                // Delay update until after focus has moved
-                setTimeout(() => {
-                    updateStockValue(item.id, 'minimum', e.target.value, true);
-                }, 50);
-            } else {
-                // Normal blur (clicking away, etc.) - update immediately
-                updateStockValue(item.id, 'minimum', e.target.value, false);
-            }
-        });
-        minimumInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.target.blur();
-                // Move to next item's current input
-                setTimeout(() => {
-                    const allCurrentInputs = Array.from(document.querySelectorAll('.current-input'));
-                    const currentIndex = allCurrentInputs.indexOf(currentInput);
-                    if (currentIndex < allCurrentInputs.length - 1) {
-                        allCurrentInputs[currentIndex + 1].focus();
-                    }
-                }, 10);
-            }
-        });
+        addInputListeners(minimumInput, 'minimum', null);
     }
 }
 
@@ -513,28 +587,32 @@ function updateStockValue(itemId, field, value, isTabBlur = false) {
     if (isNaN(numValue) || numValue < 0) {
         showFieldError(itemId, field, 'Voer een geldig getal in (≥ 0)');
         // Reset to original value
-        const input = document.querySelector(`.${field}-input[data-id="${itemId}"]`);
+        const input = document.querySelector(`input[data-field="${field}"][data-id="${itemId}"]`);
         if (input) {
-            input.value = item[field];
+            input.value = item[field] || 0;
         }
         return;
     }
     
     clearFieldError(itemId, field);
     
-    const oldValue = item[field];
+    const oldValue = item[field] || 0;
     
     // Check if value actually changed
     if (oldValue === numValue) {
         return; // No change, skip update
     }
     
+    // Update the field
     item[field] = numValue;
     item.lastModified = new Date().toISOString();
     item.modifiedBy = currentUser;
     
     saveToLocalStorage();
     updateLastModifiedInfo();
+    
+    // Calculate total stock for visual feedback
+    const totalStock = calculateTotalStock(item);
     
     // Only re-render if NOT a TAB blur (to preserve focus movement)
     // Or re-render but preserve the new focus position
@@ -544,26 +622,41 @@ function updateStockValue(itemId, field, value, isTabBlur = false) {
         const stockItem = document.querySelector(`.stock-item[data-id="${itemId}"]`);
         if (stockItem) {
             // Update classes for low-stock indication
-            const isLowStock = item.current < item.minimum;
-            const isNearMinimum = item.current <= item.minimum + 2;
+            const isLowStock = totalStock < item.minimum;
+            const isNearMinimum = totalStock <= item.minimum + 2;
             stockItem.classList.remove('low-stock', 'near-minimum');
             if (isLowStock) {
                 stockItem.classList.add('low-stock');
             } else if (isNearMinimum) {
                 stockItem.classList.add('near-minimum');
             }
+            
+            // Update total display
+            const totalDisplay = stockItem.querySelector('.stock-total-display');
+            if (totalDisplay) {
+                totalDisplay.textContent = `${totalStock} eenheden`;
+            }
         }
         
         // Restore focus to where it should be (the next element after TAB)
         if (shouldRestoreFocus && focusItemId && focusField) {
             requestAnimationFrame(() => {
-                const input = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"][data-field="${focusField}"]`);
+                const input = document.querySelector(`input[data-field="${focusField}"][data-id="${focusItemId}"]`);
                 if (input) {
                     input.focus({ preventScroll: true });
                 } else {
-                    const fallbackInput = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"]`);
-                    if (fallbackInput) {
-                        fallbackInput.focus({ preventScroll: true });
+                    // Fallback: try with class selector
+                    const fieldClassMap = {
+                        'boxes': 'boxes-input',
+                        'looseUnits': 'loose-units-input',
+                        'minimum': 'minimum-input'
+                    };
+                    const fieldClass = fieldClassMap[focusField];
+                    if (fieldClass) {
+                        const fallbackInput = document.querySelector(`input.${fieldClass}[data-id="${focusItemId}"]`);
+                        if (fallbackInput) {
+                            fallbackInput.focus({ preventScroll: true });
+                        }
                     }
                 }
             });
@@ -576,18 +669,27 @@ function updateStockValue(itemId, field, value, isTabBlur = false) {
         if (shouldRestoreFocus && focusItemId && focusField) {
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    const input = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"][data-field="${focusField}"]`);
+                    const input = document.querySelector(`input[data-field="${focusField}"][data-id="${focusItemId}"]`);
                     if (input) {
                         input.focus({ preventScroll: true });
                         if (input.type === 'number') {
                             input.select();
                         }
                     } else {
-                        const fallbackInput = document.querySelector(`input.${focusField}-input[data-id="${focusItemId}"]`);
-                        if (fallbackInput) {
-                            fallbackInput.focus({ preventScroll: true });
-                            if (fallbackInput.type === 'number') {
-                                fallbackInput.select();
+                        // Fallback: try with class selector
+                        const fieldClassMap = {
+                            'boxes': 'boxes-input',
+                            'looseUnits': 'loose-units-input',
+                            'minimum': 'minimum-input'
+                        };
+                        const fieldClass = fieldClassMap[focusField];
+                        if (fieldClass) {
+                            const fallbackInput = document.querySelector(`input.${fieldClass}[data-id="${focusItemId}"]`);
+                            if (fallbackInput) {
+                                fallbackInput.focus({ preventScroll: true });
+                                if (fallbackInput.type === 'number') {
+                                    fallbackInput.select();
+                                }
                             }
                         }
                     }
@@ -606,7 +708,7 @@ function showFieldError(itemId, field, message) {
     const errorEl = document.getElementById(`error-${field}-${itemId}`);
     if (errorEl) {
         errorEl.textContent = message;
-        const inputEl = document.querySelector(`.${field}-input[data-id="${itemId}"]`);
+        const inputEl = document.querySelector(`input[data-field="${field}"][data-id="${itemId}"]`);
         if (inputEl) {
             inputEl.classList.add('error');
         }
@@ -617,7 +719,7 @@ function clearFieldError(itemId, field) {
     const errorEl = document.getElementById(`error-${field}-${itemId}`);
     if (errorEl) {
         errorEl.textContent = '';
-        const inputEl = document.querySelector(`.${field}-input[data-id="${itemId}"]`);
+        const inputEl = document.querySelector(`input[data-field="${field}"][data-id="${itemId}"]`);
         if (inputEl) {
             inputEl.classList.remove('error');
         }
@@ -631,7 +733,10 @@ function generateOrderList() {
         return;
     }
     
-    const orderItems = stockData.filter(item => item.current < item.minimum);
+    const orderItems = stockData.filter(item => {
+        const totalStock = calculateTotalStock(item);
+        return totalStock < item.minimum;
+    });
     
     if (orderItems.length === 0) {
         showToast('Geen items om te bestellen', 'info');
@@ -666,14 +771,15 @@ function generateOrderList() {
     let totalToOrder = 0;
     
     orderItems.forEach(item => {
-        const toOrder = item.minimum - item.current;
+        const totalStock = calculateTotalStock(item);
+        const toOrder = item.minimum - totalStock;
         totalToOrder += toOrder;
         
         html += `
             <tr>
                 <td>${escapeHtml(item.name)}</td>
                 <td>${escapeHtml(item.category)}</td>
-                <td>${item.current}</td>
+                <td>${totalStock}</td>
                 <td>${item.minimum}</td>
                 <td><strong>${toOrder}</strong></td>
             </tr>
@@ -699,7 +805,10 @@ function closeOrderListModal() {
 }
 
 async function copyOrderList() {
-    const orderItems = stockData.filter(item => item.current < item.minimum);
+    const orderItems = stockData.filter(item => {
+        const totalStock = calculateTotalStock(item);
+        return totalStock < item.minimum;
+    });
     
     if (orderItems.length === 0) {
         showToast('Geen items om te bestellen', 'info');
@@ -720,9 +829,10 @@ async function copyOrderList() {
     let totalToOrder = 0;
     
     orderItems.forEach(item => {
-        const toOrder = item.minimum - item.current;
+        const totalStock = calculateTotalStock(item);
+        const toOrder = item.minimum - totalStock;
         totalToOrder += toOrder;
-        text += `${item.name}\t${item.category}\t${item.current}\t${item.minimum}\t${toOrder}\n`;
+        text += `${item.name}\t${item.category}\t${totalStock}\t${item.minimum}\t${toOrder}\n`;
     });
     
     text += '\n';
@@ -769,7 +879,10 @@ async function copyOrderList() {
 }
 
 function copyOrderListEmail() {
-    const orderItems = stockData.filter(item => item.current < item.minimum);
+    const orderItems = stockData.filter(item => {
+        const totalStock = calculateTotalStock(item);
+        return totalStock < item.minimum;
+    });
     
     if (orderItems.length === 0) {
         showToast('Geen items om te bestellen', 'info');
@@ -811,7 +924,8 @@ function copyOrderListEmail() {
     emailText += `Graag had ik volgende bestelling geplaatst voor Battlekart Gent:\n\n\n`;
     
     orderItems.forEach(item => {
-        const toOrder = item.minimum - item.current;
+        const totalStock = calculateTotalStock(item);
+        const toOrder = item.minimum - totalStock;
         const unitType = getUnitType(item.unit, toOrder);
         const productName = item.name;
         
@@ -819,7 +933,7 @@ function copyOrderListEmail() {
         emailText += `${toOrder} ${unitType} ${productName}\n`;
     });
     
-    emailText += `\nMet vriendelijke groet\n\nRuben Thielman`;
+    emailText += `\nMet vriendelijke groet\n\n${currentUser} \n Team Battlekart Gent`;
     
     navigator.clipboard.writeText(emailText).then(() => {
         showToast('✅ Email gekopieerd!', 'success');
@@ -842,11 +956,15 @@ function exportToExcel() {
     const sortedData = [...stockData].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     
     // CSV Header
-    let csv = 'Item,Categorie,Huidig,Minimum,Eenheid,Te Bestellen,Gebruiker,Datum\n';
+    let csv = 'Item,Categorie,Bakken,Losse Eenheden,Totaal,Minimum,Eenheid,Eenheden per Bak,Te Bestellen,Gebruiker,Datum\n';
     
     sortedData.forEach(item => {
-        const toOrder = item.current < item.minimum ? item.minimum - item.current : 0;
-        csv += `"${item.name}","${item.category}",${item.current},${item.minimum},"${item.unit}",${toOrder},"${item.modifiedBy || currentUser}","${dateString}"\n`;
+        const totalStock = calculateTotalStock(item);
+        const toOrder = totalStock < item.minimum ? item.minimum - totalStock : 0;
+        const boxes = item.boxes || 0;
+        const looseUnits = item.looseUnits || 0;
+        const unitsPerBox = item.unitsPerBox || 24;
+        csv += `"${item.name}","${item.category}",${boxes},${looseUnits},${totalStock},${item.minimum},"${item.unit}",${unitsPerBox},${toOrder},"${item.modifiedBy || currentUser}","${dateString}"\n`;
     });
     
     // Create blob and download
@@ -877,7 +995,8 @@ function clearAllStock() {
     }
     
     stockData.forEach(item => {
-        item.current = 0;
+        item.boxes = 0;
+        item.looseUnits = 0;
         item.lastModified = new Date().toISOString();
         item.modifiedBy = currentUser;
     });
@@ -938,6 +1057,15 @@ function renderAdminItemsList() {
                        value="${escapeHtml(item.unit)}" 
                        style="width: 150px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
             </div>
+            <div>
+                <label>Eenheden/bak: </label>
+                <input type="number" 
+                       class="admin-units-per-box-input" 
+                       data-id="${item.id}"
+                       value="${item.unitsPerBox || 24}" 
+                       min="1" 
+                       style="width: 80px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
             <div class="admin-item-actions">
                 <button class="btn-edit" onclick="saveAdminItem(${item.id})">Opslaan</button>
                 <button class="btn-delete" onclick="deleteAdminItem(${item.id})">Verwijderen</button>
@@ -949,12 +1077,16 @@ function renderAdminItemsList() {
     sortedData.forEach(item => {
         const minInput = document.querySelector(`.admin-minimum-input[data-id="${item.id}"]`);
         const unitInput = document.querySelector(`.admin-unit-input[data-id="${item.id}"]`);
+        const unitsPerBoxInput = document.querySelector(`.admin-units-per-box-input[data-id="${item.id}"]`);
         
         if (minInput) {
             minInput.addEventListener('blur', () => saveAdminItem(item.id));
         }
         if (unitInput) {
             unitInput.addEventListener('blur', () => saveAdminItem(item.id));
+        }
+        if (unitsPerBoxInput) {
+            unitsPerBoxInput.addEventListener('blur', () => saveAdminItem(item.id));
         }
     });
 }
@@ -965,6 +1097,7 @@ function saveAdminItem(itemId) {
     
     const minInput = document.querySelector(`.admin-minimum-input[data-id="${itemId}"]`);
     const unitInput = document.querySelector(`.admin-unit-input[data-id="${itemId}"]`);
+    const unitsPerBoxInput = document.querySelector(`.admin-units-per-box-input[data-id="${itemId}"]`);
     
     if (minInput) {
         const minValue = parseInt(minInput.value);
@@ -977,6 +1110,13 @@ function saveAdminItem(itemId) {
         const unitValue = unitInput.value.trim();
         if (unitValue) {
             item.unit = unitValue;
+        }
+    }
+    
+    if (unitsPerBoxInput) {
+        const unitsPerBoxValue = parseInt(unitsPerBoxInput.value);
+        if (!isNaN(unitsPerBoxValue) && unitsPerBoxValue >= 1) {
+            item.unitsPerBox = unitsPerBoxValue;
         }
     }
     
@@ -1011,10 +1151,16 @@ function addNewItem(e) {
     const name = document.getElementById('newItemName').value.trim();
     const category = document.getElementById('newItemCategory').value;
     const unit = document.getElementById('newItemUnit').value.trim();
+    const unitsPerBox = parseInt(document.getElementById('newItemUnitsPerBox').value) || 24;
     const minimum = parseInt(document.getElementById('newItemMinimum').value) || 0;
     
     if (!name || !unit) {
         showToast('Vul alle verplichte velden in', 'error');
+        return;
+    }
+    
+    if (unitsPerBox < 1) {
+        showToast('Eenheden per bak moet minimaal 1 zijn', 'error');
         return;
     }
     
@@ -1027,8 +1173,10 @@ function addNewItem(e) {
         name: name,
         category: category,
         unit: unit,
+        unitsPerBox: unitsPerBox,
         minimum: minimum,
-        current: 0,
+        boxes: 0,
+        looseUnits: 0,
         sortOrder: newSortOrder,
         lastModified: new Date().toISOString(),
         modifiedBy: currentUser
@@ -1041,6 +1189,7 @@ function addNewItem(e) {
     // Reset form
     document.getElementById('addItemForm').reset();
     document.getElementById('newItemMinimum').value = '0';
+    document.getElementById('newItemUnitsPerBox').value = '24';
     
     showToast('Item toegevoegd', 'success');
     renderAdminItemsList();

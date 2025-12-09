@@ -326,6 +326,18 @@ body {
     font-style: italic;
 }
 
+.stock-total-display {
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+    font-family: 'Inter', sans-serif;
+}
+
 .error-message {
     color: #dc3545;
     font-size: 0.85rem;
